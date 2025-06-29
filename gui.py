@@ -4,16 +4,74 @@ from tkinter import messagebox, ttk
 import vlc
 
 from logic import ChapterManager, fmt_sec, parse_flexible_time
+from config import save_config
 
-UPDATE_MS = 500  # refresh UI in ms
+
+class SettingsWindow(tk.Toplevel):
+    """Simple dialog to edit configuration."""
+
+    def __init__(self, master: tk.Tk, config: dict, on_save: callable):
+        super().__init__(master)
+        self.title("Configurações")
+        self.config = config
+        self.on_save = on_save
+
+        tk.Label(self, text="Atualização (ms)").grid(row=0, column=0, sticky="e")
+        self.update_var = tk.StringVar(value=str(config.get("update_ms", 500)))
+        tk.Entry(self, textvariable=self.update_var, width=8).grid(row=0, column=1)
+
+        tk.Label(self, text="Salto curto (s)").grid(row=1, column=0, sticky="e")
+        self.small_var = tk.StringVar(value=str(config.get("small_jump", 5)))
+        tk.Entry(self, textvariable=self.small_var, width=8).grid(row=1, column=1)
+
+        tk.Label(self, text="Salto longo (s)").grid(row=2, column=0, sticky="e")
+        self.large_var = tk.StringVar(value=str(config.get("large_jump", 20)))
+        tk.Entry(self, textvariable=self.large_var, width=8).grid(row=2, column=1)
+
+        self.key_vars: dict[str, tk.StringVar] = {}
+        labels = [
+            ("play_pause", "Play/Pause"),
+            ("back_small", "Voltar curto"),
+            ("fwd_small", "Avançar curto"),
+            ("back_large", "Voltar longo"),
+            ("fwd_large", "Avançar longo"),
+        ]
+        for i, (key, lbl) in enumerate(labels, start=3):
+            tk.Label(self, text=lbl).grid(row=i, column=0, sticky="e")
+            var = tk.StringVar(value=config.get("keys", {}).get(key, ""))
+            tk.Entry(self, textvariable=var, width=15).grid(row=i, column=1)
+            self.key_vars[key] = var
+
+        tk.Button(self, text="Salvar", command=self.save).grid(row=i + 1, column=0, columnspan=2, pady=5)
+
+        self.resizable(False, False)
+        self.grab_set()
+
+    def save(self) -> None:
+        """Persist the configuration and notify the caller."""
+        self.config["update_ms"] = int(self.update_var.get() or 500)
+        self.config["small_jump"] = int(self.small_var.get() or 5)
+        self.config["large_jump"] = int(self.large_var.get() or 20)
+        keys = self.config.setdefault("keys", {})
+        for k, var in self.key_vars.items():
+            val = var.get().strip() or keys.get(k, "")
+            keys[k] = val
+        save_config(self.config)
+        self.on_save()
+        self.destroy()
 
 
 class ChapterEditor(tk.Frame):
     """Tkinter widget that embeds a VLC player and chapter editor."""
 
-    def __init__(self, master, video_path: str):
+    def __init__(self, master: tk.Tk, video_path: str, config: dict):
         super().__init__(master)
         self.pack(fill="both", expand=True)
+
+        self.config = config
+        self.update_ms = config.get("update_ms", 500)
+        self.small_jump = config.get("small_jump", 5)
+        self.large_jump = config.get("large_jump", 20)
 
         self.manager = ChapterManager(video_path)
         self.chaps: list[dict] = self.manager.load()
@@ -35,8 +93,35 @@ class ChapterEditor(tk.Frame):
 
         controls = tk.Frame(vid_box)
         controls.pack(fill="x")
+
+        self.back_large_btn = tk.Button(
+            controls,
+            text=f"«{self.large_jump}s",
+            command=lambda: self._jump(-self.large_jump),
+        )
+        self.back_large_btn.pack(side="left")
+        self.back_small_btn = tk.Button(
+            controls,
+            text=f"‹{self.small_jump}s",
+            command=lambda: self._jump(-self.small_jump),
+        )
+        self.back_small_btn.pack(side="left")
+
         for txt, cmd in (("▶", self.player.play), ("❚❚", self.player.pause), ("■", self.player.stop)):
             tk.Button(controls, text=txt, command=cmd).pack(side="left")
+
+        self.fwd_small_btn = tk.Button(
+            controls,
+            text=f"{self.small_jump}s›",
+            command=lambda: self._jump(self.small_jump),
+        )
+        self.fwd_small_btn.pack(side="left")
+        self.fwd_large_btn = tk.Button(
+            controls,
+            text=f"{self.large_jump}s»",
+            command=lambda: self._jump(self.large_jump),
+        )
+        self.fwd_large_btn.pack(side="left")
 
         self.scale = tk.Scale(
             controls,
@@ -89,6 +174,19 @@ class ChapterEditor(tk.Frame):
         self._refresh_tree()
         # self.after(UPDATE_MS, self._update_ui)
         self._start_update_loop()
+        self._bind_keys()
+
+    def update_config(self, config: dict) -> None:
+        """Apply updated configuration to the editor."""
+        self.config = config
+        self.update_ms = config.get("update_ms", self.update_ms)
+        self.small_jump = config.get("small_jump", self.small_jump)
+        self.large_jump = config.get("large_jump", self.large_jump)
+        self.back_small_btn.config(text=f"‹{self.small_jump}s")
+        self.back_large_btn.config(text=f"«{self.large_jump}s")
+        self.fwd_small_btn.config(text=f"{self.small_jump}s›")
+        self.fwd_large_btn.config(text=f"{self.large_jump}s»")
+        self._bind_keys()
 
     # ----------- video helpers ----------
     def _embed_player(self):
@@ -102,6 +200,11 @@ class ChapterEditor(tk.Frame):
         dur = self.player.get_length()
         if dur > 0:
             self.player.set_time(int(scale_val / 1000 * dur))
+
+    def _jump(self, secs: int) -> None:
+        """Skip the given number of seconds relative to current time."""
+        cur = self.player.get_time()
+        self.player.set_time(max(0, cur + secs * 1000))
 
     # ----------- chapters ----------
     def _refresh_tree(self):
@@ -193,7 +296,7 @@ class ChapterEditor(tk.Frame):
 
     # ----------- UI loop ----------
     def _start_update_loop(self):
-        self.updater = self.after(UPDATE_MS, self._update_ui)
+        self.updater = self.after(self.update_ms, self._update_ui)
 
     def _stop_update_loop(self):
         if self.updater:
@@ -232,3 +335,20 @@ class ChapterEditor(tk.Frame):
         if dur > 0:
             self.player.set_time(int(val / 1000 * dur))
         self._start_update_loop()
+
+    # ----------- key bindings ---------
+    def _bind_keys(self) -> None:
+        keys = self.config.get("keys", {})
+        root = self.winfo_toplevel()
+
+        root.bind(keys.get("play_pause", "<space>"), lambda _: self._play_pause())
+        root.bind(keys.get("back_small", "<Left>"), lambda _: self._jump(-self.small_jump))
+        root.bind(keys.get("fwd_small", "<Right>"), lambda _: self._jump(self.small_jump))
+        root.bind(keys.get("back_large", "<Shift-Left>"), lambda _: self._jump(-self.large_jump))
+        root.bind(keys.get("fwd_large", "<Shift-Right>"), lambda _: self._jump(self.large_jump))
+
+    def _play_pause(self) -> None:
+        if self.player.is_playing():
+            self.player.pause()
+        else:
+            self.player.play()
