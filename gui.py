@@ -35,9 +35,7 @@ class ChapterEditor(tk.Frame):
 
         controls = tk.Frame(vid_box)
         controls.pack(fill="x")
-        for txt, cmd in (("▶", self.player.play),
-                         ("❚❚", self.player.pause),
-                         ("■", self.player.stop)):
+        for txt, cmd in (("▶", self.player.play), ("❚❚", self.player.pause), ("■", self.player.stop)):
             tk.Button(controls, text=txt, command=cmd).pack(side="left")
 
         self.scale = tk.Scale(
@@ -217,17 +215,20 @@ class ChapterEditor(tk.Frame):
         dur = self.player.get_length()
         pos = self.player.get_time()
         if dur > 0:
+            # evita que a atualização do slider altere o tempo do vídeo
+            self.scale.config(command="")
             self.scale.set(int(pos / dur * 1000))
+            self.scale.config(command=lambda v: self._seek(int(v)))
             self.time_lbl.config(text=f"{fmt_sec(pos//1000)} / {fmt_sec(dur//1000)}")
-        self._start_update_loop()      # agenda o próximo
+        self._start_update_loop()  # agenda o próximo
 
     # ------------- drag -------------
     def _drag_start(self, _):
-        self._stop_update_loop()       # congela o loop
+        self._stop_update_loop()  # congela o loop
 
     def _drag_end(self, _):
         val = self.scale.get()
         dur = self.player.get_length()
         if dur > 0:
             self.player.set_time(int(val / 1000 * dur))
-        self._start_update_loop()   
+        self._start_update_loop()
