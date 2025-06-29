@@ -176,6 +176,14 @@ class ChapterEditor(tk.Frame):
         self._start_update_loop()
         self._bind_keys()
 
+    def destroy(self) -> None:  # type: ignore[override]
+        """Stop playback and clean up VLC resources."""
+        self._stop_update_loop()
+        self.player.stop()
+        self.player.release()
+        self.vlc.release()
+        super().destroy()
+
     def update_config(self, config: dict) -> None:
         """Apply updated configuration to the editor."""
         self.config = config
