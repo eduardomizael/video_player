@@ -53,9 +53,12 @@ class ChapterEditor(tk.Frame):
         self.time_lbl = tk.Label(controls, text="00:00 / 00:00")
         self.time_lbl.pack(side="right")
 
-        self.drag = False
-        self.scale.bind("<ButtonPress-1>", lambda *_: setattr(self, "drag", True))
-        self.scale.bind("<ButtonRelease-1>", lambda *_: setattr(self, "drag", False))
+        # self.drag = False
+        # self.scale.bind("<ButtonPress-1>", lambda *_: setattr(self, "drag", True))
+        # self.scale.bind("<ButtonRelease-1>", lambda *_: setattr(self, "drag", False))
+        self.updater = None
+        self.scale.bind("<ButtonPress-1>", self._drag_start)
+        self.scale.bind("<ButtonRelease-1>", self._drag_end)
 
         # --- chapter panel ---
         side = tk.Frame(main, width=260, relief="groove", bd=1)
@@ -86,7 +89,8 @@ class ChapterEditor(tk.Frame):
         tk.Button(btns, text="– remover", command=self.rm_chapter).pack(side="left", padx=2)
 
         self._refresh_tree()
-        self.after(UPDATE_MS, self._update_ui)
+        # self.after(UPDATE_MS, self._update_ui)
+        self._start_update_loop()
 
     # ----------- video helpers ----------
     def _embed_player(self):
@@ -97,8 +101,6 @@ class ChapterEditor(tk.Frame):
             self.player.set_xwindow(wid)
 
     def _seek(self, scale_val: int):
-        if self.drag:
-            return
         dur = self.player.get_length()
         if dur > 0:
             self.player.set_time(int(scale_val / 1000 * dur))
@@ -192,13 +194,40 @@ class ChapterEditor(tk.Frame):
         entry.bind("<KeyRelease>", format_time)
 
     # ----------- UI loop ----------
+    def _start_update_loop(self):
+        self.updater = self.after(UPDATE_MS, self._update_ui)
+
+    def _stop_update_loop(self):
+        if self.updater:
+            self.after_cancel(self.updater)
+            self.updater = None
+
+    # def _update_ui(self):
+    #     dur = self.player.get_length()
+    #     pos = self.player.get_time()
+    #     if dur > 0 and not self.drag:
+    #         self.scale.config(command='')
+    #         self.scale.set(int(pos / dur * 1000))
+    #         self.scale.config(command=lambda v: self._seek(int(v)))
+
+    #     self.time_lbl.config(text=f"{fmt_sec(pos//1000)} / {fmt_sec(dur//1000)}")
+    #     self.after(UPDATE_MS, self._update_ui)
+
     def _update_ui(self):
         dur = self.player.get_length()
         pos = self.player.get_time()
-        if dur > 0 and not self.drag:
-            self.scale.config(command='')
+        if dur > 0:
             self.scale.set(int(pos / dur * 1000))
-            self.scale.config(command=lambda v: self._seek(int(v)))
+            self.time_lbl.config(text=f"{fmt_sec(pos//1000)} / {fmt_sec(dur//1000)}")
+        self._start_update_loop()      # agenda o próximo
 
-        self.time_lbl.config(text=f"{fmt_sec(pos//1000)} / {fmt_sec(dur//1000)}")
-        self.after(UPDATE_MS, self._update_ui)
+    # ------------- drag -------------
+    def _drag_start(self, _):
+        self._stop_update_loop()       # congela o loop
+
+    def _drag_end(self, _):
+        val = self.scale.get()
+        dur = self.player.get_length()
+        if dur > 0:
+            self.player.set_time(int(val / 1000 * dur))
+        self._start_update_loop()   
