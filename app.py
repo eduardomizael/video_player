@@ -14,7 +14,11 @@ def main() -> None:
 
     def open_video() -> None:
         nonlocal editor
-        path = filedialog.askopenfilename(filetypes=[("Vídeo MP4", "*.mp4")])
+        path = filedialog.askopenfilename(filetypes=[
+            ("Vídeo MP4", "*.mp4"),
+            ("Videos AVI", "*.avi"),
+            ("Todos os arquivos", "*.*")
+        ])
         if not path:
             return
         if editor:
