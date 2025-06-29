@@ -35,9 +35,7 @@ class ChapterEditor(tk.Frame):
 
         controls = tk.Frame(vid_box)
         controls.pack(fill="x")
-        for txt, cmd in (("▶", self.player.play),
-                         ("❚❚", self.player.pause),
-                         ("■", self.player.stop)):
+        for txt, cmd in (("▶", self.player.play), ("❚❚", self.player.pause), ("■", self.player.stop)):
             tk.Button(controls, text=txt, command=cmd).pack(side="left")
 
         self.scale = tk.Scale(
@@ -178,7 +176,7 @@ class ChapterEditor(tk.Frame):
         dur = self.player.get_length()
         pos = self.player.get_time()
         if dur > 0 and not self.drag:
-            self.scale.config(command='')
+            self.scale.config(command="")
             self.scale.set(int(pos / dur * 1000))
             self.scale.config(command=lambda v: self._seek(int(v)))
 

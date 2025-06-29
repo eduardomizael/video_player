@@ -11,7 +11,7 @@ def fmt_sec(sec: int) -> str:
 
 def parse_time(txt: str) -> int:
     """Parse ``hh:mm:ss`` or ``mm:ss`` strings into seconds."""
-    parts = [int(p) for p in txt.strip().split(':')]
+    parts = [int(p) for p in txt.strip().split(":")]
     if len(parts) == 2:
         m, s = parts
         h = 0
