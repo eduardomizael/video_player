@@ -3,14 +3,14 @@ import os
 
 
 def fmt_sec(sec: int) -> str:
-    """Convert seconds to ``hh:mm:ss`` or ``mm:ss`` format."""
+    """Converte segundos para formato ``hh:mm:ss`` ou ``mm:ss``."""
     h, sec = divmod(max(0, sec), 3600)
     m, s = divmod(sec, 60)
     return f"{h:02d}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
 
 
 def parse_time(txt: str) -> int:
-    """Parse ``hh:mm:ss`` or ``mm:ss`` strings into seconds."""
+    """Converte strings ``hh:mm:ss`` ou ``mm:ss`` em segundos."""
     parts = [int(p) for p in txt.strip().split(":")]
     if len(parts) == 2:
         m, s = parts
@@ -23,7 +23,7 @@ def parse_time(txt: str) -> int:
 
 
 def parse_flexible_time(txt: str) -> int:
-    """Parse ``hh:mm:ss``, ``mm:ss`` or plain digits into seconds."""
+    """Converte ``hh:mm:ss``, ``mm:ss`` ou dígitos em segundos."""
     cleaned = txt.strip()
     if ":" in cleaned:
         return parse_time(cleaned)
@@ -47,12 +47,16 @@ def parse_flexible_time(txt: str) -> int:
 
 
 class ChapterManager:
-    """Handle loading and saving chapter information for a video."""
+    """Gerencia carregamento e salvamento de capítulos de um vídeo."""
 
     def __init__(self, video_path: str) -> None:
+        """Cria um gerenciador para o arquivo de vídeo indicado."""
+
         self.json_path = os.path.splitext(video_path)[0] + ".json"
 
     def load(self) -> list[dict]:
+        """Carrega os dados de capítulos do disco, se houver."""
+
         chapters: list[dict] = []
         if os.path.exists(self.json_path):
             with open(self.json_path, "r", encoding="utf-8") as fh:
@@ -60,5 +64,7 @@ class ChapterManager:
         return chapters
 
     def save(self, chapters: list[dict]) -> None:
+        """Grava os dados de capítulos no disco."""
+
         with open(self.json_path, "w", encoding="utf-8") as fh:
             json.dump(chapters, fh, ensure_ascii=False, indent=2)

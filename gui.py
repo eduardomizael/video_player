@@ -8,9 +8,11 @@ from config import save_config
 
 
 class SettingsWindow(tk.Toplevel):
-    """Simple dialog to edit configuration."""
+    """Diálogo simples para editar e salvar as configurações."""
 
-    def __init__(self, master: tk.Tk, config: dict, on_save: callable):
+    def __init__(self, master: tk.Tk, config: dict, on_save: callable) -> None:
+        """Cria a janela com a configuração atual."""
+
         super().__init__(master)
         self.title("Configurações")
         self.config = config
@@ -50,7 +52,7 @@ class SettingsWindow(tk.Toplevel):
         self.grab_set()
 
     def _capture_key(self, event: tk.Event, var: tk.StringVar) -> str:
-        """Capture pressed key and save as Tk binding string."""
+        """Captura a tecla pressionada e salva como string de atalho do Tk."""
         mods = []
         if event.state & 0x4:
             mods.append("Control")
@@ -62,7 +64,7 @@ class SettingsWindow(tk.Toplevel):
         return "break"
 
     def save(self) -> None:
-        """Persist the configuration and notify the caller."""
+        """Salva a configuração e avisa o chamador."""
         self.config["update_ms"] = int(self.update_var.get() or 500)
         self.config["small_jump"] = int(self.small_var.get() or 5)
         self.config["large_jump"] = int(self.large_var.get() or 20)
@@ -76,9 +78,11 @@ class SettingsWindow(tk.Toplevel):
 
 
 class ChapterEditor(tk.Frame):
-    """Tkinter widget that embeds a VLC player and chapter editor."""
+    """Widget Tkinter que incorpora o player VLC e o editor de capítulos."""
 
-    def __init__(self, master: tk.Tk, video_path: str, config: dict):
+    def __init__(self, master: tk.Tk, video_path: str, config: dict) -> None:
+        """Inicializa o editor para o vídeo informado."""
+
         super().__init__(master)
         self.pack(fill="both", expand=True)
 
@@ -191,7 +195,7 @@ class ChapterEditor(tk.Frame):
         self._bind_keys()
 
     def destroy(self) -> None:  # type: ignore[override]
-        """Stop playback and clean up VLC resources."""
+        """Interrompe a reprodução e libera recursos do VLC."""
         self._stop_update_loop()
         self.player.stop()
         self.player.release()
@@ -199,7 +203,7 @@ class ChapterEditor(tk.Frame):
         super().destroy()
 
     def update_config(self, config: dict) -> None:
-        """Apply updated configuration to the editor."""
+        """Aplica a configuração atualizada ao editor."""
         self.config = config
         self.update_ms = config.get("update_ms", self.update_ms)
         self.small_jump = config.get("small_jump", self.small_jump)
@@ -211,30 +215,38 @@ class ChapterEditor(tk.Frame):
         self._bind_keys()
 
     # ----------- video helpers ----------
-    def _embed_player(self):
+    def _embed_player(self) -> None:
+        """Conecta o player VLC ao canvas do Tk."""
+
         wid = self.canvas.winfo_id()
         if os.name == "nt":
             self.player.set_hwnd(wid)
         else:
             self.player.set_xwindow(wid)
 
-    def _seek(self, scale_val: int):
+    def _seek(self, scale_val: int) -> None:
+        """Move o vídeo conforme o valor do controle deslizante."""
+
         dur = self.player.get_length()
         if dur > 0:
             self.player.set_time(int(scale_val / 1000 * dur))
 
     def _jump(self, secs: int) -> None:
-        """Skip the given number of seconds relative to current time."""
+        """Avança ou retrocede o número de segundos indicado."""
         cur = self.player.get_time()
         self.player.set_time(max(0, cur + secs * 1000))
 
     # ----------- chapters ----------
-    def _refresh_tree(self):
+    def _refresh_tree(self) -> None:
+        """Atualiza a árvore com a lista de capítulos."""
+
         self.tree.delete(*self.tree.get_children())
         for c in self.chaps:
             self.tree.insert("", "end", values=(c["title"], fmt_sec(c["start"]), fmt_sec(c["end"])))
 
-    def add_chapter(self):
+    def add_chapter(self) -> None:
+        """Cria um novo capítulo na posição atual de reprodução."""
+
         cur_sec = self.player.get_time() // 1000
         title = f"Capítulo {len(self.chaps) + 1}"
         end_sec = self.player.get_length() // 1000 or cur_sec + 10
@@ -243,7 +255,9 @@ class ChapterEditor(tk.Frame):
         self._refresh_tree()
         self.manager.save(self.chaps)
 
-    def rm_chapter(self):
+    def rm_chapter(self) -> None:
+        """Remove o capítulo selecionado após confirmação."""
+
         sel = self.tree.selection()
         if not sel:
             return
@@ -253,14 +267,18 @@ class ChapterEditor(tk.Frame):
             self._refresh_tree()
             self.manager.save(self.chaps)
 
-    def _jump_to_chapter(self, _):
+    def _jump_to_chapter(self, _) -> None:
+        """Leva a reprodução para o início do capítulo escolhido."""
+
         sel = self.tree.selection()
         if sel:
             sec = self.chaps[self.tree.index(sel[0])]["start"]
             self.player.set_time(sec * 1000)
 
     # ----------- inline edit ----------
-    def _inline_edit(self, event):
+    def _inline_edit(self, event: tk.Event) -> None:
+        """Permite editar título ou tempos diretamente na árvore."""
+
         row_id = self.tree.identify_row(event.y)
         col = self.tree.identify_column(event.x)
         if not row_id or col == "#0":
@@ -276,7 +294,8 @@ class ChapterEditor(tk.Frame):
         entry.insert(0, old_val)
         entry.focus()
 
-        def commit(e=None):
+        def commit(e: tk.Event | None = None) -> None:
+            """Finaliza a edição e atualiza a lista de capítulos."""
             new_val = entry.get().strip()
             entry.destroy()
             idx = self.tree.index(row_id)
@@ -297,7 +316,8 @@ class ChapterEditor(tk.Frame):
             self._refresh_tree()
             self.manager.save(self.chaps)
 
-        def format_time(_):
+        def format_time(_: tk.Event) -> None:
+            """Formata os dígitos digitados como tempo durante a edição."""
             if col_idx == 0:
                 return
             digits = "".join(ch for ch in entry.get() if ch.isdigit())[-6:]
@@ -317,10 +337,14 @@ class ChapterEditor(tk.Frame):
         entry.bind("<KeyRelease>", format_time)
 
     # ----------- UI loop ----------
-    def _start_update_loop(self):
+    def _start_update_loop(self) -> None:
+        """Agenda a atualização periódica da interface."""
+
         self.updater = self.after(self.update_ms, self._update_ui)
 
-    def _stop_update_loop(self):
+    def _stop_update_loop(self) -> None:
+        """Cancela a atualização periódica se estiver ativa."""
+
         if self.updater:
             self.after_cancel(self.updater)
             self.updater = None
@@ -336,7 +360,9 @@ class ChapterEditor(tk.Frame):
     #     self.time_lbl.config(text=f"{fmt_sec(pos//1000)} / {fmt_sec(dur//1000)}")
     #     self.after(UPDATE_MS, self._update_ui)
 
-    def _update_ui(self):
+    def _update_ui(self) -> None:
+        """Atualiza posição do slider e o rótulo de tempo."""
+
         dur = self.player.get_length()
         pos = self.player.get_time()
         if dur > 0:
@@ -348,10 +374,14 @@ class ChapterEditor(tk.Frame):
         self._start_update_loop()  # agenda o próximo
 
     # ------------- drag -------------
-    def _drag_start(self, _):
+    def _drag_start(self, _: tk.Event) -> None:
+        """Pausa as atualizações enquanto o slider é arrastado."""
+
         self._stop_update_loop()  # congela o loop
 
-    def _drag_end(self, _):
+    def _drag_end(self, _: tk.Event) -> None:
+        """Vai para a nova posição e retoma as atualizações."""
+
         val = self.scale.get()
         dur = self.player.get_length()
         if dur > 0:
@@ -360,6 +390,8 @@ class ChapterEditor(tk.Frame):
 
     # ----------- key bindings ---------
     def _bind_keys(self) -> None:
+        """Configura os atalhos de teclado definidos na configuração."""
+
         keys = self.config.get("keys", {})
         root = self.winfo_toplevel()
 
@@ -370,6 +402,8 @@ class ChapterEditor(tk.Frame):
         root.bind(keys.get("fwd_large", "<Shift-Right>"), lambda _: self._jump(self.large_jump))
 
     def _play_pause(self) -> None:
+        """Alterna entre reproduzir e pausar."""
+
         if self.player.is_playing():
             self.player.pause()
         else:
