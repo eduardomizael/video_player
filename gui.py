@@ -3,7 +3,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 import vlc
 
-from logic import ChapterManager, fmt_sec, parse_time
+from logic import ChapterManager, fmt_sec, parse_flexible_time
 
 UPDATE_MS = 500  # refresh UI in ms
 
@@ -160,18 +160,36 @@ class ChapterEditor(tk.Frame):
                     self.chaps[idx]["title"] = new_val
             else:
                 try:
-                    sec = parse_time(new_val)
+                    sec = parse_flexible_time(new_val)
                 except ValueError:
-                    messagebox.showerror("Tempo", "Formato hh:mm:ss ou mm:ss")
+                    messagebox.showerror(
+                        "Tempo",
+                        "Formato hh:mm:ss, mm:ss ou somente dígitos",
+                    )
                     return
                 key = "start" if col_idx == 1 else "end"
                 self.chaps[idx][key] = sec
             self._refresh_tree()
             self.manager.save(self.chaps)
 
+        def format_time(_):
+            if col_idx == 0:
+                return
+            digits = "".join(ch for ch in entry.get() if ch.isdigit())[-6:]
+            if len(digits) > 4:
+                val = f"{digits[:-4]}:{digits[-4:-2]}:{digits[-2:]}"
+            elif len(digits) > 2:
+                val = f"{digits[:-2]}:{digits[-2:]}"
+            else:
+                val = digits
+            entry.delete(0, tk.END)
+            entry.insert(0, val)
+            entry.icursor(tk.END)
+
         entry.bind("<Return>", commit)
         entry.bind("<Escape>", lambda *_: entry.destroy())
         entry.bind("<FocusOut>", lambda *_: entry.destroy())
+        entry.bind("<KeyRelease>", format_time)
 
     # ----------- UI loop ----------
     def _update_ui(self):

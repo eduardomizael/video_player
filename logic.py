@@ -11,7 +11,7 @@ def fmt_sec(sec: int) -> str:
 
 def parse_time(txt: str) -> int:
     """Parse ``hh:mm:ss`` or ``mm:ss`` strings into seconds."""
-    parts = [int(p) for p in txt.strip().split(':')]
+    parts = [int(p) for p in txt.strip().split(":")]
     if len(parts) == 2:
         m, s = parts
         h = 0
@@ -19,6 +19,30 @@ def parse_time(txt: str) -> int:
         h, m, s = parts
     else:
         raise ValueError("Time must be in hh:mm:ss or mm:ss format")
+    return h * 3600 + m * 60 + s
+
+
+def parse_flexible_time(txt: str) -> int:
+    """Parse ``hh:mm:ss``, ``mm:ss`` or plain digits into seconds."""
+    cleaned = txt.strip()
+    if ":" in cleaned:
+        return parse_time(cleaned)
+
+    digits = "".join(ch for ch in cleaned if ch.isdigit())
+    if not digits:
+        raise ValueError("Invalid time")
+
+    digits = digits[-6:]  # keep last 6 digits (hhmmss)
+    if len(digits) <= 2:
+        h, m, s = 0, 0, int(digits)
+    elif len(digits) <= 4:
+        h = 0
+        m = int(digits[:-2])
+        s = int(digits[-2:])
+    else:
+        h = int(digits[:-4])
+        m = int(digits[-4:-2])
+        s = int(digits[-2:])
     return h * 3600 + m * 60 + s
 
 
