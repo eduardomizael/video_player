@@ -21,6 +21,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
 
 
 def _deep_update(base: Dict[str, Any], updates: Dict[str, Any]) -> None:
+    """Atualiza ``base`` recursivamente com valores de ``updates``."""
+
     for k, v in updates.items():
         if isinstance(v, dict) and isinstance(base.get(k), dict):
             _deep_update(base[k], v)
@@ -29,6 +31,8 @@ def _deep_update(base: Dict[str, Any], updates: Dict[str, Any]) -> None:
 
 
 def load_config() -> Dict[str, Any]:
+    """Carrega a configuração de ``CONFIG_PATH`` mesclando com os valores padrão."""
+
     cfg = DEFAULT_CONFIG.copy()
     cfg["keys"] = cfg["keys"].copy()
     if os.path.exists(CONFIG_PATH):
@@ -39,5 +43,7 @@ def load_config() -> Dict[str, Any]:
 
 
 def save_config(cfg: Dict[str, Any]) -> None:
+    """Grava o dicionário de configuração em disco."""
+
     with open(CONFIG_PATH, "w", encoding="utf-8") as fh:
         json.dump(cfg, fh, ensure_ascii=False, indent=2)

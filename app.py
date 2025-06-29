@@ -6,6 +6,8 @@ from gui import ChapterEditor, SettingsWindow
 
 
 def main() -> None:
+    """Inicializa a interface gráfica e executa o aplicativo."""
+
     root = tk.Tk()
     root.title("Editor de Capítulos")
 
@@ -13,12 +15,16 @@ def main() -> None:
     editor: ChapterEditor | None = None
 
     def open_video() -> None:
+        """Abre um vídeo e cria o widget do editor."""
+
         nonlocal editor
-        path = filedialog.askopenfilename(filetypes=[
-            ("Vídeo MP4", "*.mp4"),
-            ("Videos AVI", "*.avi"),
-            ("Todos os arquivos", "*.*")
-        ])
+        path = filedialog.askopenfilename(
+            filetypes=[
+                ("Vídeo MP4", "*.mp4"),
+                ("Videos AVI", "*.avi"),
+                ("Todos os arquivos", "*.*"),
+            ]
+        )
         if not path:
             return
         if editor:
@@ -26,6 +32,8 @@ def main() -> None:
         editor = ChapterEditor(root, path, config)
 
     def show_settings() -> None:
+        """Exibe a janela de configurações."""
+
         SettingsWindow(root, config, lambda: editor.update_config(config) if editor else None)
 
     menubar = tk.Menu(root)

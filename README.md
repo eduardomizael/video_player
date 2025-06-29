@@ -13,4 +13,11 @@ Aplicativo simples escrito em Python 3.12 que usa `python-vlc` para reprodu\u00e
 - Bot\u00f5es de avan\u00e7ar/retroceder
 - Tela de configura\u00e7\u00f5es para definir atalhos (basta pressionar a tecla desejada)
 
-Execute `app.py` para iniciar o programa.
+## Instalação
+
+1. Certifique-se de ter o Python 3.12 instalado.
+2. Instale a dependência `python-vlc` com `pip install python-vlc`.
+
+## Uso
+
+Execute `python app.py` para iniciar o programa e escolha o vídeo que deseja editar.
