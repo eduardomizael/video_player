@@ -39,13 +39,27 @@ class SettingsWindow(tk.Toplevel):
         for i, (key, lbl) in enumerate(labels, start=3):
             tk.Label(self, text=lbl).grid(row=i, column=0, sticky="e")
             var = tk.StringVar(value=config.get("keys", {}).get(key, ""))
-            tk.Entry(self, textvariable=var, width=15).grid(row=i, column=1)
+            ent = tk.Entry(self, textvariable=var, width=15)
+            ent.grid(row=i, column=1)
+            ent.bind("<Key>", lambda e, v=var: self._capture_key(e, v))
             self.key_vars[key] = var
 
         tk.Button(self, text="Salvar", command=self.save).grid(row=i + 1, column=0, columnspan=2, pady=5)
 
         self.resizable(False, False)
         self.grab_set()
+
+    def _capture_key(self, event: tk.Event, var: tk.StringVar) -> str:
+        """Capture pressed key and save as Tk binding string."""
+        mods = []
+        if event.state & 0x4:
+            mods.append("Control")
+        if event.state & 0x1:
+            mods.append("Shift")
+        if event.state & 0x8:
+            mods.append("Alt")
+        var.set("<" + "-".join(mods + [event.keysym]) + ">")
+        return "break"
 
     def save(self) -> None:
         """Persist the configuration and notify the caller."""
