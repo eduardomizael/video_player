@@ -17,6 +17,11 @@ class SettingsWindow(tk.Toplevel):
         self.title("Configurações")
         self.config = config
         self.on_save = on_save
+        
+        # Configurar janela modal e sempre no topo
+        self.transient(master)
+        self.attributes('-topmost', True)
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
 
         tk.Label(self, text="Atualização (ms)").grid(row=0, column=0, sticky="e")
         self.update_var = tk.StringVar(value=str(config.get("update_ms", 500)))
@@ -50,6 +55,14 @@ class SettingsWindow(tk.Toplevel):
 
         self.resizable(False, False)
         self.grab_set()
+        
+        # Centralizar a janela em relação à janela principal
+        self.update_idletasks()
+        width = self.winfo_width()
+        height = self.winfo_height()
+        x = master.winfo_x() + (master.winfo_width() - width) // 2
+        y = master.winfo_y() + (master.winfo_height() - height) // 2
+        self.geometry(f"{width}x{height}+{x}+{y}")
 
     def _capture_key(self, event: tk.Event, var: tk.StringVar) -> str:
         """Captura a tecla pressionada e salva como string de atalho do Tk."""
@@ -154,9 +167,6 @@ class ChapterEditor(tk.Frame):
         self.time_lbl = tk.Label(controls, text="00:00 / 00:00")
         self.time_lbl.pack(side="right")
 
-        # self.drag = False
-        # self.scale.bind("<ButtonPress-1>", lambda *_: setattr(self, "drag", True))
-        # self.scale.bind("<ButtonRelease-1>", lambda *_: setattr(self, "drag", False))
         self.updater = None
         self.scale.bind("<ButtonPress-1>", self._drag_start)
         self.scale.bind("<ButtonRelease-1>", self._drag_end)
@@ -190,11 +200,10 @@ class ChapterEditor(tk.Frame):
         tk.Button(btns, text="– remover", command=self.rm_chapter).pack(side="left", padx=2)
 
         self._refresh_tree()
-        # self.after(UPDATE_MS, self._update_ui)
         self._start_update_loop()
         self._bind_keys()
 
-    def destroy(self) -> None:  # type: ignore[override]
+    def destroy(self) -> None:
         """Interrompe a reprodução e libera recursos do VLC."""
         self._stop_update_loop()
         self.player.stop()
@@ -348,17 +357,6 @@ class ChapterEditor(tk.Frame):
         if self.updater:
             self.after_cancel(self.updater)
             self.updater = None
-
-    # def _update_ui(self):
-    #     dur = self.player.get_length()
-    #     pos = self.player.get_time()
-    #     if dur > 0 and not self.drag:
-    #         self.scale.config(command='')
-    #         self.scale.set(int(pos / dur * 1000))
-    #         self.scale.config(command=lambda v: self._seek(int(v)))
-
-    #     self.time_lbl.config(text=f"{fmt_sec(pos//1000)} / {fmt_sec(dur//1000)}")
-    #     self.after(UPDATE_MS, self._update_ui)
 
     def _update_ui(self) -> None:
         """Atualiza posição do slider e o rótulo de tempo."""
