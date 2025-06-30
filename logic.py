@@ -47,24 +47,29 @@ def parse_flexible_time(txt: str) -> int:
 
 
 class ChapterManager:
-    """Gerencia carregamento e salvamento de capítulos de um vídeo."""
+    """Gerencia carregamento e salvamento de dados de um vídeo."""
 
     def __init__(self, video_path: str) -> None:
         """Cria um gerenciador para o arquivo de vídeo indicado."""
 
         self.json_path = os.path.splitext(video_path)[0] + ".json"
 
-    def load(self) -> list[dict]:
-        """Carrega os dados de capítulos do disco, se houver."""
+    def load(self) -> dict:
+        """Carrega capítulos e casting do disco, se houver."""
 
-        chapters: list[dict] = []
+        data: dict = {"chapters": [], "casting": []}
         if os.path.exists(self.json_path):
             with open(self.json_path, "r", encoding="utf-8") as fh:
-                chapters = json.load(fh)
-        return chapters
+                loaded = json.load(fh)
+            if isinstance(loaded, list):
+                data["chapters"] = loaded
+            else:
+                data["chapters"] = loaded.get("chapters", [])
+                data["casting"] = loaded.get("casting", [])
+        return data
 
-    def save(self, chapters: list[dict]) -> None:
-        """Grava os dados de capítulos no disco."""
+    def save(self, chapters: list[dict], casting: list[str]) -> None:
+        """Grava capítulos e casting no disco."""
 
         with open(self.json_path, "w", encoding="utf-8") as fh:
-            json.dump(chapters, fh, ensure_ascii=False, indent=2)
+            json.dump({"chapters": chapters, "casting": casting}, fh, ensure_ascii=False, indent=2)

@@ -5,6 +5,7 @@ Aplicativo simples escrito em Python 3.12 que usa `python-vlc` para reprodu\u00e
 ## Recursos
 
 - Abrir v\u00eddeos e editar cap\u00edtulos
+- Aba adicional para editar lista de casting
 - Menu para abrir novos arquivos
 - Arquivo `config.json` armazena:
   - Intervalo de atualiza\u00e7\u00e3o da interface
