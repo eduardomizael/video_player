@@ -1,4 +1,5 @@
 import os
+import sys
 import tkinter as tk
 from tkinter import messagebox, ttk
 import vlc
@@ -71,8 +72,12 @@ class SettingsWindow(tk.Toplevel):
             mods.append("Control")
         if event.state & 0x1:
             mods.append("Shift")
-        if event.state & 0x8:
-            mods.append("Alt")
+        if sys.platform.startswith("win"):
+            if event.state & 0x20000:
+                mods.append("Alt")
+        else:
+            if event.state & 0x8:
+                mods.append("Alt")
         var.set("<" + "-".join(mods + [event.keysym]) + ">")
         return "break"
 
@@ -322,7 +327,8 @@ class ChapterEditor(tk.Frame):
             parent = self.item_map.get(parent_id, target)
         subs = parent.setdefault("subs", [])
         title = f"Sub {len(subs) + 1}"
-        subs.append({"title": title, "start": parent["start"], "end": parent["end"]})
+        cur_sec = self.player.get_time() // 1000
+        subs.append({"title": title, "start": cur_sec, "end": parent["end"]})
         self._refresh_chap_tree()
         self.manager.save(self.chaps, self.casting)
 
