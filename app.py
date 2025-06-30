@@ -13,6 +13,7 @@ def main() -> None:
 
     config = load_config()
     editor: ChapterEditor | None = None
+    last_video_path = config.get("last_video", "")
 
     def open_video() -> None:
         """Abre um vídeo e cria o widget do editor."""
@@ -30,6 +31,8 @@ def main() -> None:
         if editor:
             editor.destroy()
         editor = ChapterEditor(root, path, config)
+        config["last_video"] = last_video_path = path
+        editor.player.play()
 
     def show_settings() -> None:
         """Exibe a janela de configurações."""
@@ -46,7 +49,11 @@ def main() -> None:
     menubar.add_command(label="Configurações", command=show_settings)
     root.config(menu=menubar)
 
-    open_video()
+    if last_video_path:
+        editor = ChapterEditor(root, last_video_path, config)
+    else:
+        open_video()
+        
     root.mainloop()
     save_config(config)
 

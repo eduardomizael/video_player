@@ -362,16 +362,19 @@ class ChapterEditor(tk.Frame):
 
         row_id = self.tree.identify_row(event.y)
         col = self.tree.identify_column(event.x)
-        if not row_id or col == "#0":
+        if not row_id:
             return
-        col_idx = int(col[1:]) - 1
+        # col_idx = 0 if col == "#0" else int(col[1:])
         bbox = self.tree.bbox(row_id, col)
         if not bbox:
             return
         x, y, w, h = bbox
         entry = tk.Entry(self.tree)
         entry.place(x=x, y=y, width=w, height=h)
-        old_val = self.tree.set(row_id, col)
+        if col == "#0":
+            old_val = self.tree.item(row_id, "text")
+        else:
+            old_val = self.tree.set(row_id, col)
         entry.insert(0, old_val)
         entry.focus()
 
@@ -382,7 +385,7 @@ class ChapterEditor(tk.Frame):
             node = self.item_map.get(row_id)
             if not node:
                 return
-            if col_idx == 0:
+            if col == '#0':
                 if new_val:
                     node["title"] = new_val
             else:
@@ -394,14 +397,14 @@ class ChapterEditor(tk.Frame):
                         "Formato hh:mm:ss, mm:ss ou somente dígitos",
                     )
                     return
-                key = "start" if col_idx == 1 else "end"
+                key = "start" if col == "#1" else "end"
                 node[key] = sec
             self._refresh_chap_tree()
             self.manager.save(self.chaps, self.casting)
 
         def format_time(_: tk.Event) -> None:
             """Formata os dígitos digitados como tempo durante a edição."""
-            if col_idx == 0:
+            if col == "#0":
                 return
             digits = "".join(ch for ch in entry.get() if ch.isdigit())[-6:]
             if len(digits) > 4:
