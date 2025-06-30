@@ -185,15 +185,15 @@ class ChapterEditor(tk.Frame):
 
         self.tree = ttk.Treeview(
             chap_tab,
-            columns=("title", "start", "end"),
-            show="headings",
+            columns=("start", "end"),
+            show="tree headings",
             selectmode="browse",
             height=15,
         )
-        self.tree.heading("title", text="Título", anchor="w")
+        self.tree.heading("#0", text="Título", anchor="w")
         self.tree.heading("start", text="Início", anchor="e")
         self.tree.heading("end", text="Fim", anchor="e")
-        self.tree.column("title", width=150, anchor="w")
+        self.tree.column("#0", width=150, anchor="w")
         self.tree.column("start", width=80, anchor="e")
         self.tree.column("end", width=80, anchor="e")
         self.tree.pack(fill="both", expand=True, padx=4, pady=2)
@@ -204,6 +204,7 @@ class ChapterEditor(tk.Frame):
         btns = tk.Frame(chap_tab)
         btns.pack()
         tk.Button(btns, text="+ adicionar", command=self.add_chapter).pack(side="left", padx=2)
+        tk.Button(btns, text="+ sub", command=self.add_subchapter).pack(side="left", padx=2)
         tk.Button(btns, text="– remover", command=self.rm_chapter).pack(side="left", padx=2)
 
         cast_tab = tk.Frame(self.notebook)
@@ -278,8 +279,21 @@ class ChapterEditor(tk.Frame):
         """Atualiza a árvore com a lista de capítulos."""
 
         self.tree.delete(*self.tree.get_children())
-        for c in self.chaps:
-            self.tree.insert("", "end", values=(c["title"], fmt_sec(c["start"]), fmt_sec(c["end"])))
+        self.item_map: dict[str, dict] = {}
+
+        def add_items(parent: str, items: list[dict]) -> None:
+            for chap in items:
+                item_id = self.tree.insert(
+                    parent,
+                    "end",
+                    text=chap["title"],
+                    values=(fmt_sec(chap["start"]), fmt_sec(chap["end"])),
+                    open=True,
+                )
+                self.item_map[item_id] = chap
+                add_items(item_id, chap.get("subs", []))
+
+        add_items("", self.chaps)
 
     def add_chapter(self) -> None:
         """Cria um novo capítulo na posição atual de reprodução."""
@@ -287,8 +301,28 @@ class ChapterEditor(tk.Frame):
         cur_sec = self.player.get_time() // 1000
         title = f"Capítulo {len(self.chaps) + 1}"
         end_sec = self.player.get_length() // 1000 or cur_sec + 10
-        self.chaps.append({"title": title, "start": cur_sec, "end": end_sec})
+        self.chaps.append({"title": title, "start": cur_sec, "end": end_sec, "subs": []})
         self.chaps.sort(key=lambda x: x["start"])
+        self._refresh_chap_tree()
+        self.manager.save(self.chaps, self.casting)
+
+    def add_subchapter(self) -> None:
+        """Adiciona um subcapítulo ao item selecionado."""
+
+        sel = self.tree.selection()
+        if not sel:
+            return
+        item = sel[0]
+        target = self.item_map.get(item)
+        if target is None:
+            return
+        parent = target
+        if item not in self.tree.get_children(""):
+            parent_id = self.tree.parent(item)
+            parent = self.item_map.get(parent_id, target)
+        subs = parent.setdefault("subs", [])
+        title = f"Sub {len(subs) + 1}"
+        subs.append({"title": title, "start": parent["start"], "end": parent["end"]})
         self._refresh_chap_tree()
         self.manager.save(self.chaps, self.casting)
 
@@ -298,19 +332,29 @@ class ChapterEditor(tk.Frame):
         sel = self.tree.selection()
         if not sel:
             return
-        idx = self.tree.index(sel[0])
-        if messagebox.askyesno("Remover", f"Excluir '{self.chaps[idx]['title']}'?"):
-            self.chaps.pop(idx)
-            self._refresh_chap_tree()
-            self.manager.save(self.chaps, self.casting)
+        item = sel[0]
+        node = self.item_map.get(item)
+        if node is None:
+            return
+        parent_id = self.tree.parent(item)
+        if not parent_id:
+            if messagebox.askyesno("Remover", f"Excluir '{node['title']}'?"):
+                self.chaps.remove(node)
+        else:
+            parent_node = self.item_map.get(parent_id)
+            if parent_node and messagebox.askyesno("Remover", f"Excluir '{node['title']}'?"):
+                parent_node.get("subs", []).remove(node)
+        self._refresh_chap_tree()
+        self.manager.save(self.chaps, self.casting)
 
     def _jump_to_chapter(self, _) -> None:
         """Leva a reprodução para o início do capítulo escolhido."""
 
         sel = self.tree.selection()
         if sel:
-            sec = self.chaps[self.tree.index(sel[0])]["start"]
-            self.player.set_time(sec * 1000)
+            node = self.item_map.get(sel[0])
+            if node:
+                self.player.set_time(node["start"] * 1000)
 
     # ----------- inline edit ----------
     def _inline_edit(self, event: tk.Event) -> None:
@@ -335,10 +379,12 @@ class ChapterEditor(tk.Frame):
             """Finaliza a edição e atualiza a lista de capítulos."""
             new_val = entry.get().strip()
             entry.destroy()
-            idx = self.tree.index(row_id)
+            node = self.item_map.get(row_id)
+            if not node:
+                return
             if col_idx == 0:
                 if new_val:
-                    self.chaps[idx]["title"] = new_val
+                    node["title"] = new_val
             else:
                 try:
                     sec = parse_flexible_time(new_val)
@@ -349,7 +395,7 @@ class ChapterEditor(tk.Frame):
                     )
                     return
                 key = "start" if col_idx == 1 else "end"
-                self.chaps[idx][key] = sec
+                node[key] = sec
             self._refresh_chap_tree()
             self.manager.save(self.chaps, self.casting)
 
