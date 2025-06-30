@@ -17,10 +17,10 @@ class SettingsWindow(tk.Toplevel):
         self.title("Configurações")
         self.config = config
         self.on_save = on_save
-        
+
         # Configurar janela modal e sempre no topo
         self.transient(master)
-        self.attributes('-topmost', True)
+        self.attributes("-topmost", True)
         self.protocol("WM_DELETE_WINDOW", self.destroy)
 
         tk.Label(self, text="Atualização (ms)").grid(row=0, column=0, sticky="e")
@@ -55,7 +55,7 @@ class SettingsWindow(tk.Toplevel):
 
         self.resizable(False, False)
         self.grab_set()
-        
+
         # Centralizar a janela em relação à janela principal
         self.update_idletasks()
         width = self.winfo_width()
@@ -105,7 +105,9 @@ class ChapterEditor(tk.Frame):
         self.large_jump = config.get("large_jump", 20)
 
         self.manager = ChapterManager(video_path)
-        self.chaps: list[dict] = self.manager.load()
+        data = self.manager.load()
+        self.chaps: list[dict] = data.get("chapters", [])
+        self.casting: list[str] = data.get("casting", [])
 
         # VLC setup
         self.vlc = vlc.Instance()
@@ -174,10 +176,15 @@ class ChapterEditor(tk.Frame):
         # --- chapter panel ---
         side = tk.Frame(main, width=260, relief="groove", bd=1)
         side.pack(side="right", fill="y")
-        tk.Label(side, text="Capítulos").pack()
+
+        self.notebook = ttk.Notebook(side)
+        self.notebook.pack(fill="both", expand=True)
+
+        chap_tab = tk.Frame(self.notebook)
+        self.notebook.add(chap_tab, text="Capítulos")
 
         self.tree = ttk.Treeview(
-            side,
+            chap_tab,
             columns=("title", "start", "end"),
             show="headings",
             selectmode="browse",
@@ -194,12 +201,33 @@ class ChapterEditor(tk.Frame):
         self.tree.bind("<<TreeviewSelect>>", self._jump_to_chapter)
         self.tree.bind("<Double-1>", self._inline_edit)
 
-        btns = tk.Frame(side)
+        btns = tk.Frame(chap_tab)
         btns.pack()
         tk.Button(btns, text="+ adicionar", command=self.add_chapter).pack(side="left", padx=2)
         tk.Button(btns, text="– remover", command=self.rm_chapter).pack(side="left", padx=2)
 
-        self._refresh_tree()
+        cast_tab = tk.Frame(self.notebook)
+        self.notebook.add(cast_tab, text="Casting")
+
+        self.cast_tree = ttk.Treeview(
+            cast_tab,
+            columns=("name",),
+            show="headings",
+            selectmode="browse",
+            height=15,
+        )
+        self.cast_tree.heading("name", text="Nome", anchor="w")
+        self.cast_tree.column("name", width=200, anchor="w")
+        self.cast_tree.pack(fill="both", expand=True, padx=4, pady=2)
+        self.cast_tree.bind("<Double-1>", self._inline_edit_cast)
+
+        cast_btns = tk.Frame(cast_tab)
+        cast_btns.pack()
+        tk.Button(cast_btns, text="+ adicionar", command=self.add_cast).pack(side="left", padx=2)
+        tk.Button(cast_btns, text="– remover", command=self.rm_cast).pack(side="left", padx=2)
+
+        self._refresh_chap_tree()
+        self._refresh_cast_tree()
         self._start_update_loop()
         self._bind_keys()
 
@@ -246,7 +274,7 @@ class ChapterEditor(tk.Frame):
         self.player.set_time(max(0, cur + secs * 1000))
 
     # ----------- chapters ----------
-    def _refresh_tree(self) -> None:
+    def _refresh_chap_tree(self) -> None:
         """Atualiza a árvore com a lista de capítulos."""
 
         self.tree.delete(*self.tree.get_children())
@@ -261,8 +289,8 @@ class ChapterEditor(tk.Frame):
         end_sec = self.player.get_length() // 1000 or cur_sec + 10
         self.chaps.append({"title": title, "start": cur_sec, "end": end_sec})
         self.chaps.sort(key=lambda x: x["start"])
-        self._refresh_tree()
-        self.manager.save(self.chaps)
+        self._refresh_chap_tree()
+        self.manager.save(self.chaps, self.casting)
 
     def rm_chapter(self) -> None:
         """Remove o capítulo selecionado após confirmação."""
@@ -273,8 +301,8 @@ class ChapterEditor(tk.Frame):
         idx = self.tree.index(sel[0])
         if messagebox.askyesno("Remover", f"Excluir '{self.chaps[idx]['title']}'?"):
             self.chaps.pop(idx)
-            self._refresh_tree()
-            self.manager.save(self.chaps)
+            self._refresh_chap_tree()
+            self.manager.save(self.chaps, self.casting)
 
     def _jump_to_chapter(self, _) -> None:
         """Leva a reprodução para o início do capítulo escolhido."""
@@ -322,8 +350,8 @@ class ChapterEditor(tk.Frame):
                     return
                 key = "start" if col_idx == 1 else "end"
                 self.chaps[idx][key] = sec
-            self._refresh_tree()
-            self.manager.save(self.chaps)
+            self._refresh_chap_tree()
+            self.manager.save(self.chaps, self.casting)
 
         def format_time(_: tk.Event) -> None:
             """Formata os dígitos digitados como tempo durante a edição."""
@@ -344,6 +372,63 @@ class ChapterEditor(tk.Frame):
         entry.bind("<Escape>", lambda *_: entry.destroy())
         entry.bind("<FocusOut>", lambda *_: entry.destroy())
         entry.bind("<KeyRelease>", format_time)
+
+    # ----------- casting ----------
+    def _refresh_cast_tree(self) -> None:
+        """Atualiza a lista de casting."""
+
+        self.cast_tree.delete(*self.cast_tree.get_children())
+        for name in self.casting:
+            self.cast_tree.insert("", "end", values=(name,))
+
+    def add_cast(self) -> None:
+        """Adiciona um novo nome à lista de casting."""
+
+        self.casting.append("Novo nome")
+        self._refresh_cast_tree()
+        self.manager.save(self.chaps, self.casting)
+
+    def rm_cast(self) -> None:
+        """Remove o nome selecionado após confirmação."""
+
+        sel = self.cast_tree.selection()
+        if not sel:
+            return
+        idx = self.cast_tree.index(sel[0])
+        if messagebox.askyesno("Remover", f"Excluir '{self.casting[idx]}'?"):
+            self.casting.pop(idx)
+            self._refresh_cast_tree()
+            self.manager.save(self.chaps, self.casting)
+
+    def _inline_edit_cast(self, event: tk.Event) -> None:
+        """Permite editar um nome diretamente na lista de casting."""
+
+        row_id = self.cast_tree.identify_row(event.y)
+        col = self.cast_tree.identify_column(event.x)
+        if not row_id or col == "#0":
+            return
+        bbox = self.cast_tree.bbox(row_id, col)
+        if not bbox:
+            return
+        x, y, w, h = bbox
+        entry = tk.Entry(self.cast_tree)
+        entry.place(x=x, y=y, width=w, height=h)
+        old_val = self.cast_tree.set(row_id, col)
+        entry.insert(0, old_val)
+        entry.focus()
+
+        def commit(e: tk.Event | None = None) -> None:
+            new_val = entry.get().strip()
+            entry.destroy()
+            idx = self.cast_tree.index(row_id)
+            if new_val:
+                self.casting[idx] = new_val
+                self._refresh_cast_tree()
+                self.manager.save(self.chaps, self.casting)
+
+        entry.bind("<Return>", commit)
+        entry.bind("<Escape>", lambda *_: entry.destroy())
+        entry.bind("<FocusOut>", lambda *_: entry.destroy())
 
     # ----------- UI loop ----------
     def _start_update_loop(self) -> None:
