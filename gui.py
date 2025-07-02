@@ -133,37 +133,64 @@ class ChapterEditor(tk.Frame):
         controls = tk.Frame(vid_box)
         controls.pack(fill="x")
 
+        top_bar = tk.Frame(controls)
+        top_bar.pack(fill="x")
+        bottom_bar = tk.Frame(controls)
+        bottom_bar.pack(fill="x")
+
+        self.cur_time_lbl = tk.Label(top_bar, text="00:00")
+        self.cur_time_lbl.pack(side="left")
+        self.total_time_lbl = tk.Label(top_bar, text="00:00")
+        self.total_time_lbl.pack(side="right")
+        self.scale = tk.Scale(
+            top_bar,
+            from_=0,
+            to=1000,
+            showvalue=0,
+            orient="horizontal",
+            length=400,
+            command=lambda v: self._seek(int(v)),
+        )
+        self.scale.pack(side="left", fill="x", expand=True, padx=5)
+
+        self.play_pause_btn = tk.Button(
+            bottom_bar,
+            text="▶",
+            command=self._play_pause,
+            font=("Helvetica", 12, "bold"),
+            width=4,
+        )
+        self.play_pause_btn.pack(side="left", padx=5)
+
         self.back_large_btn = tk.Button(
-            controls,
+            bottom_bar,
             text=f"«{self.large_jump}s",
             command=lambda: self._jump(-self.large_jump),
         )
         self.back_large_btn.pack(side="left")
         self.back_small_btn = tk.Button(
-            controls,
+            bottom_bar,
             text=f"‹{self.small_jump}s",
             command=lambda: self._jump(-self.small_jump),
         )
         self.back_small_btn.pack(side="left")
-
-        for txt, cmd in (("▶", self.player.play), ("❚❚", self.player.pause), ("■", self.player.stop)):
-            tk.Button(controls, text=txt, command=cmd).pack(side="left")
-
         self.fwd_small_btn = tk.Button(
-            controls,
+            bottom_bar,
             text=f"{self.small_jump}s›",
             command=lambda: self._jump(self.small_jump),
         )
         self.fwd_small_btn.pack(side="left")
         self.fwd_large_btn = tk.Button(
-            controls,
+            bottom_bar,
             text=f"{self.large_jump}s»",
             command=lambda: self._jump(self.large_jump),
         )
         self.fwd_large_btn.pack(side="left")
 
+        vol_frame = tk.Frame(bottom_bar)
+        vol_frame.pack(side="right")
         self.volume_scale = tk.Scale(
-            controls,
+            vol_frame,
             from_=0,
             to=100,
             orient="horizontal",
@@ -173,19 +200,8 @@ class ChapterEditor(tk.Frame):
         )
         self.volume_scale.set(config.get("volume", 100))
         self.volume_scale.pack(side="left", padx=5)
-
-        self.scale = tk.Scale(
-            controls,
-            from_=0,
-            to=1000,
-            showvalue=0,
-            orient="horizontal",
-            length=400,
-            command=lambda v: self._seek(int(v)),
-        )
-        self.scale.pack(side="left", fill="x", expand=True, padx=5)
-        self.time_lbl = tk.Label(controls, text="00:00 / 00:00")
-        self.time_lbl.pack(side="right")
+        self.volume_lbl = tk.Label(vol_frame, text=f"{self.volume_scale.get()}%")
+        self.volume_lbl.pack(side="left")
 
         self.updater = None
         self.scale.bind("<ButtonPress-1>", self._drag_start)
@@ -300,6 +316,7 @@ class ChapterEditor(tk.Frame):
         vol = int(float(val))
         self.player.audio_set_volume(vol)
         self.config["volume"] = vol
+        self.volume_lbl.config(text=f"{vol}%")
         save_config(self.config)
 
     # ----------- chapters ----------
@@ -531,7 +548,8 @@ class ChapterEditor(tk.Frame):
             self.scale.config(command="")
             self.scale.set(int(pos / dur * 1000))
             self.scale.config(command=lambda v: self._seek(int(v)))
-            self.time_lbl.config(text=f"{fmt_sec(pos//1000)} / {fmt_sec(dur//1000)}")
+            self.cur_time_lbl.config(text=fmt_sec(pos // 1000))
+            self.total_time_lbl.config(text=fmt_sec(dur // 1000))
         self._start_update_loop()  # agenda o próximo
 
     # ------------- drag -------------
@@ -567,5 +585,7 @@ class ChapterEditor(tk.Frame):
 
         if self.player.is_playing():
             self.player.pause()
+            self.play_pause_btn.config(text="▶")
         else:
             self.player.play()
+            self.play_pause_btn.config(text="❚❚")
