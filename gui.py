@@ -127,7 +127,7 @@ class ChapterEditor(tk.Frame):
         vid_box.pack(side="left", fill="both", expand=True)
         self.canvas = tk.Canvas(vid_box, bg="black")
         self.canvas.pack(fill="both", expand=True)
-        self.after(100, self._embed_player)
+        self.after(100, self._embed_and_play)
 
         controls = tk.Frame(vid_box)
         controls.pack(fill="x")
@@ -267,6 +267,12 @@ class ChapterEditor(tk.Frame):
         else:
             self.player.set_xwindow(wid)
 
+    def _embed_and_play(self) -> None:
+        """Conecta o VLC ao canvas e inicia a reprodução."""
+
+        self._embed_player()
+        self.player.play()
+
     def _seek(self, scale_val: int) -> None:
         """Move o vídeo conforme o valor do controle deslizante."""
 
@@ -391,7 +397,7 @@ class ChapterEditor(tk.Frame):
             node = self.item_map.get(row_id)
             if not node:
                 return
-            if col == '#0':
+            if col == "#0":
                 if new_val:
                     node["title"] = new_val
             else:
