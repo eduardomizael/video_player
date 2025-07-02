@@ -174,6 +174,10 @@ class ChapterEditor(tk.Frame):
             command=lambda: self._jump(-self.small_jump),
         )
         self.back_small_btn.pack(side="left")
+
+        self.separator_lbl = tk.Label(bottom_bar, text=" | ")
+        self.separator_lbl.pack(side="left")
+        
         self.fwd_small_btn = tk.Button(
             bottom_bar,
             text=f"{self.small_jump}s›",
