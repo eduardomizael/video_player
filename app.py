@@ -31,7 +31,7 @@ def main() -> None:
         if editor:
             editor.destroy()
         editor = ChapterEditor(root, path, config)
-        config["last_video"] = last_video_path = path
+        config["last_video"] = path
         editor.player.play()
 
     def show_settings() -> None:
@@ -53,7 +53,7 @@ def main() -> None:
         editor = ChapterEditor(root, last_video_path, config)
     else:
         open_video()
-        
+
     root.mainloop()
     save_config(config)
 

@@ -10,6 +10,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "update_ms": 500,
     "small_jump": 5,
     "large_jump": 20,
+    "volume": 100,
     "keys": {
         "play_pause": "<space>",
         "back_small": "<Left>",

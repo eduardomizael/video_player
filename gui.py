@@ -118,6 +118,7 @@ class ChapterEditor(tk.Frame):
         self.vlc = vlc.Instance()
         self.player = self.vlc.media_player_new()
         self.player.set_media(self.vlc.media_new(video_path))
+        self.player.audio_set_volume(config.get("volume", 100))
 
         main = tk.Frame(self)
         main.pack(fill="both", expand=True)
@@ -160,6 +161,18 @@ class ChapterEditor(tk.Frame):
             command=lambda: self._jump(self.large_jump),
         )
         self.fwd_large_btn.pack(side="left")
+
+        self.volume_scale = tk.Scale(
+            controls,
+            from_=0,
+            to=100,
+            orient="horizontal",
+            length=100,
+            showvalue=0,
+            command=self._change_volume,
+        )
+        self.volume_scale.set(config.get("volume", 100))
+        self.volume_scale.pack(side="left", padx=5)
 
         self.scale = tk.Scale(
             controls,
@@ -251,6 +264,9 @@ class ChapterEditor(tk.Frame):
         self.update_ms = config.get("update_ms", self.update_ms)
         self.small_jump = config.get("small_jump", self.small_jump)
         self.large_jump = config.get("large_jump", self.large_jump)
+        volume = config.get("volume", self.player.audio_get_volume())
+        self.player.audio_set_volume(volume)
+        self.volume_scale.set(volume)
         self.back_small_btn.config(text=f"‹{self.small_jump}s")
         self.back_large_btn.config(text=f"«{self.large_jump}s")
         self.fwd_small_btn.config(text=f"{self.small_jump}s›")
@@ -278,6 +294,13 @@ class ChapterEditor(tk.Frame):
         """Avança ou retrocede o número de segundos indicado."""
         cur = self.player.get_time()
         self.player.set_time(max(0, cur + secs * 1000))
+
+    def _change_volume(self, val: str) -> None:
+        """Ajusta o volume do player e salva na configuração."""
+        vol = int(float(val))
+        self.player.audio_set_volume(vol)
+        self.config["volume"] = vol
+        save_config(self.config)
 
     # ----------- chapters ----------
     def _refresh_chap_tree(self) -> None:
@@ -391,7 +414,7 @@ class ChapterEditor(tk.Frame):
             node = self.item_map.get(row_id)
             if not node:
                 return
-            if col == '#0':
+            if col == "#0":
                 if new_val:
                     node["title"] = new_val
             else:

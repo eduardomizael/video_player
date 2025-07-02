@@ -12,6 +12,7 @@ Aplicativo simples escrito em Python 3.12 que usa `python-vlc` para reprodu\u00e
   - Intervalo de atualiza\u00e7\u00e3o da interface
   - Tempo dos saltos r\u00e1pidos (curto e longo)
   - Teclas de atalho para play/pause e avan\u00e7o/retrocesso
+  - N\u00edvel de volume do player
 - Bot\u00f5es de avan\u00e7ar/retroceder
 - Tela de configura\u00e7\u00f5es para definir atalhos (basta pressionar a tecla desejada)
 
