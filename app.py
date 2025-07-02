@@ -32,7 +32,6 @@ def main() -> None:
             editor.destroy()
         editor = ChapterEditor(root, path, config)
         config["last_video"] = path
-        editor.player.play()
 
     def show_settings() -> None:
         """Exibe a janela de configurações."""
