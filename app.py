@@ -8,6 +8,8 @@ from gui import ChapterEditor, SettingsWindow
 def main() -> None:
     """Inicializa a interface gráfica e executa o aplicativo."""
 
+
+    import sys
     root = tk.Tk()
     root.title("Editor de Capítulos")
 
@@ -15,17 +17,17 @@ def main() -> None:
     editor: ChapterEditor | None = None
     last_video_path = config.get("last_video", "")
 
-    def open_video() -> None:
+    def open_video(path: str = "") -> None:
         """Abre um vídeo e cria o widget do editor."""
-
         nonlocal editor
-        path = filedialog.askopenfilename(
-            filetypes=[
-                ("Vídeo MP4", "*.mp4"),
-                ("Videos AVI", "*.avi"),
-                ("Todos os arquivos", "*.*"),
-            ]
-        )
+        if not path:
+            path = filedialog.askopenfilename(
+                filetypes=[
+                    ("Vídeo MP4", "*.mp4"),
+                    ("Videos AVI", "*.avi"),
+                    ("Todos os arquivos", "*.*"),
+                ]
+            )
         if not path:
             return
         if editor:
@@ -35,12 +37,11 @@ def main() -> None:
 
     def show_settings() -> None:
         """Exibe a janela de configurações."""
-
         SettingsWindow(root, config, lambda: editor.update_config(config) if editor else None)
 
     menubar = tk.Menu(root)
     file_menu = tk.Menu(menubar, tearoff=0)
-    file_menu.add_command(label="Abrir vídeo", command=open_video)
+    file_menu.add_command(label="Abrir vídeo", command=lambda: open_video())
     file_menu.add_separator()
     file_menu.add_command(label="Sair", command=root.quit)
     menubar.add_cascade(label="Arquivo", menu=file_menu)
@@ -48,8 +49,15 @@ def main() -> None:
     menubar.add_command(label="Configurações", command=show_settings)
     root.config(menu=menubar)
 
-    if last_video_path:
-        editor = ChapterEditor(root, last_video_path, config)
+    # Verifica se foi passado um arquivo de vídeo via argumento
+    video_arg = ""
+    if len(sys.argv) > 1:
+        video_arg = sys.argv[1]
+
+    if video_arg:
+        open_video(video_arg)
+    elif last_video_path:
+        open_video(last_video_path)
     else:
         open_video()
 
