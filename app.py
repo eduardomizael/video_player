@@ -1,15 +1,40 @@
+import sys
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog, messagebox
 
 from config import load_config, save_config
-from gui import ChapterEditor, SettingsWindow
+
+
+def check_vlc_installed() -> bool:
+    """Verifica se o VLC Media Player está instalado e acessível no sistema."""
+    try:
+        import vlc
+
+        instance = vlc.Instance()
+        if instance is None:
+            return False
+        instance.release()
+        return True
+    except Exception:
+        return False
 
 
 def main() -> None:
     """Inicializa a interface gráfica e executa o aplicativo."""
+    if not check_vlc_installed():
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror(
+            "VLC Não Encontrado",
+            "O VLC Media Player não foi encontrado no sistema.\n\n"
+            "Ele é necessário para a execução deste aplicativo.\n"
+            "Por favor, instale o VLC Media Player (versão 64-bit) e tente novamente.",
+        )
+        root.destroy()
+        sys.exit(1)
 
+    from gui import ChapterEditor, SettingsWindow
 
-    import sys
     root = tk.Tk()
     root.title("Editor de Capítulos")
 
