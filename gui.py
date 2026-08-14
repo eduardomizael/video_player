@@ -212,6 +212,9 @@ class ChapterEditor(tk.Frame):
         self.notebook = ttk.Notebook(side)
         self.notebook.pack(fill="both", expand=True)
 
+        chap_tab = tk.Frame(self.notebook)
+        self.notebook.add(chap_tab, text="Capítulos")
+
         chap_frame = tk.Frame(chap_tab)
         chap_frame.pack(fill="both", expand=True, padx=4, pady=2)
 
@@ -234,8 +237,16 @@ class ChapterEditor(tk.Frame):
         self.tree.pack(side="left", fill="both", expand=True)
         self.chap_scroll.pack(side="right", fill="y")
 
-        self.tree.bind("<<TreeviewSelect>>", self._jump_to_chapter)
+        self.context_menu = tk.Menu(self.tree, tearoff=0)
+        self.context_menu.add_command(label="Definir início na posição atual", command=self._set_start_from_current)
+        self.context_menu.add_command(label="Definir fim na posição atual", command=self._set_end_from_current)
+
+        self.tree.bind("<ButtonRelease-1>", self._on_tree_left_click)
+        self.tree.bind("<KeyRelease-Up>", self._jump_to_chapter)
+        self.tree.bind("<KeyRelease-Down>", self._jump_to_chapter)
         self.tree.bind("<Double-1>", self._inline_edit)
+        self.tree.bind("<Button-3>", self._show_context_menu)
+        self.tree.bind("<Button-2>", self._show_context_menu)
 
         btns = tk.Frame(chap_tab)
         btns.pack()
@@ -408,14 +419,66 @@ class ChapterEditor(tk.Frame):
         self._refresh_chap_tree()
         self.manager.save(self.chaps, self.casting)
 
+    def _on_tree_left_click(self, event: tk.Event) -> None:
+        """Leva a reprodução para o início do capítulo clicado com o botão esquerdo."""
+
+        row_id = self.tree.identify_row(event.y)
+        if not row_id:
+            return
+        node = self.item_map.get(row_id)
+        if node:
+            self.player.set_time(node["start"] * 1000)
+
     def _jump_to_chapter(self, _) -> None:
-        """Leva a reprodução para o início do capítulo escolhido."""
+        """Leva a reprodução para o início do capítulo selecionado por teclado."""
 
         sel = self.tree.selection()
         if sel:
             node = self.item_map.get(sel[0])
             if node:
                 self.player.set_time(node["start"] * 1000)
+
+    # ----------- context menu ----------
+    def _show_context_menu(self, event: tk.Event) -> None:
+        """Exibe o menu de contexto ao clicar com o botão direito em um capítulo."""
+
+        row_id = self.tree.identify_row(event.y)
+        if not row_id:
+            return
+        self.tree.selection_set(row_id)
+        self.context_menu.tk_popup(event.x_root, event.y_root)
+
+    def _set_start_from_current(self) -> None:
+        """Define o tempo de início do capítulo selecionado para a posição atual do vídeo."""
+
+        sel = self.tree.selection()
+        if not sel:
+            return
+        node = self.item_map.get(sel[0])
+        if not node:
+            return
+        cur_sec = self.player.get_time() // 1000
+        node["start"] = cur_sec
+        self.chaps.sort(key=lambda x: x["start"])
+        for chap in self.chaps:
+            if chap.get("subs"):
+                chap["subs"].sort(key=lambda x: x["start"])
+        self._refresh_chap_tree()
+        self.manager.save(self.chaps, self.casting)
+
+    def _set_end_from_current(self) -> None:
+        """Define o tempo de fim do capítulo selecionado para a posição atual do vídeo."""
+
+        sel = self.tree.selection()
+        if not sel:
+            return
+        node = self.item_map.get(sel[0])
+        if not node:
+            return
+        cur_sec = self.player.get_time() // 1000
+        node["end"] = cur_sec
+        self._refresh_chap_tree()
+        self.manager.save(self.chaps, self.casting)
 
     # ----------- inline edit ----------
     def _inline_edit(self, event: tk.Event) -> None:
