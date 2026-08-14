@@ -24,4 +24,14 @@ Aplicativo simples escrito em Python 3.12 que usa `python-vlc` para reprodu\u00e
 
 ## Uso
 
-Execute `python app.py` para iniciar o programa e escolha o vídeo que deseja editar.
+Execute `python app.py` (ou `uv run python app.py`) para iniciar o programa e escolha o vídeo que deseja editar.
+
+## Gerando Executável (.exe)
+
+Para gerar uma versão executável standalone no Windows:
+
+- **Via terminal**: Execute `uv run python build.py` ou `python build.py`.
+- **Via clique duplo**: Clique duas vezes no arquivo [`build.bat`](file:///c:/Users/eduar/Desktop/chapter_editor/build.bat).
+
+O executável final será gerado dentro do diretório `dist/EditorDeCapitulos.exe`.
+
