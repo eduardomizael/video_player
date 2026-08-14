@@ -59,8 +59,11 @@ class ChapterManager:
 
         data: dict = {"chapters": [], "casting": []}
         if os.path.exists(self.json_path):
-            with open(self.json_path, "r", encoding="utf-8") as fh:
-                loaded = json.load(fh)
+            try:
+                with open(self.json_path, "r", encoding="utf-8") as fh:
+                    loaded = json.load(fh)
+            except json.JSONDecodeError:
+                return data  # Retorna dados vazios se o JSON for inválido
             if isinstance(loaded, list):
                 data["chapters"] = loaded
             else:

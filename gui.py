@@ -2,10 +2,11 @@ import os
 import sys
 import tkinter as tk
 from tkinter import messagebox, ttk
+
 import vlc
 
-from logic import ChapterManager, fmt_sec, parse_flexible_time
 from config import save_config
+from logic import ChapterManager, fmt_sec, parse_flexible_time
 
 
 class SettingsWindow(tk.Toplevel):
@@ -153,43 +154,24 @@ class ChapterEditor(tk.Frame):
         )
         self.scale.pack(side="left", fill="x", expand=True, padx=5)
 
-        self.play_pause_btn = tk.Button(
-            bottom_bar,
-            text="▶",
-            command=self._play_pause,
-            font=("Helvetica", 12, "bold"),
-            width=4,
-        )
-        self.play_pause_btn.pack(side="left", padx=5)
+        def create_button(parent, text, command, **kwargs):
+            btn = tk.Button(parent, text=text, command=command, **kwargs)
+            btn.pack(side="left")
+            return btn
 
-        self.back_large_btn = tk.Button(
-            bottom_bar,
-            text=f"«{self.large_jump}s",
-            command=lambda: self._jump(-self.large_jump),
-        )
-        self.back_large_btn.pack(side="left")
-        self.back_small_btn = tk.Button(
-            bottom_bar,
-            text=f"‹{self.small_jump}s",
-            command=lambda: self._jump(-self.small_jump),
-        )
-        self.back_small_btn.pack(side="left")
+        self.play_pause_btn = create_button(bottom_bar, "▶", self._play_pause, font=("Helvetica", 12, "bold"), width=4)
+        self.play_pause_btn.pack(padx=5)
+
+        self.back_large_btn = create_button(bottom_bar, f"«{self.large_jump}s", lambda: self._jump(-self.large_jump))
+        self.back_small_btn = create_button(bottom_bar, f"‹{self.small_jump}s", lambda: self._jump(-self.small_jump))
 
         self.separator_lbl = tk.Label(bottom_bar, text=" | ")
         self.separator_lbl.pack(side="left")
         
-        self.fwd_small_btn = tk.Button(
-            bottom_bar,
-            text=f"{self.small_jump}s›",
-            command=lambda: self._jump(self.small_jump),
-        )
-        self.fwd_small_btn.pack(side="left")
-        self.fwd_large_btn = tk.Button(
-            bottom_bar,
-            text=f"{self.large_jump}s»",
-            command=lambda: self._jump(self.large_jump),
-        )
-        self.fwd_large_btn.pack(side="left")
+        self.fwd_small_btn = create_button(bottom_bar, f"{self.small_jump}s›", lambda: self._jump(self.small_jump))
+        self.fwd_large_btn = create_button(bottom_bar, f"{self.large_jump}s»", lambda: self._jump(self.large_jump))
+
+        self.play_pause_btn.pack(side="left", padx=5)
 
         vol_frame = tk.Frame(bottom_bar)
         vol_frame.pack(side="right")
@@ -307,7 +289,7 @@ class ChapterEditor(tk.Frame):
         """Conecta o player VLC ao canvas do Tk e inicia a reprodução."""
 
         self._embed_player()
-        self.player.play()
+        self._play_pause()
 
     def _seek(self, scale_val: int) -> None:
         """Move o vídeo conforme o valor do controle deslizante."""
@@ -420,12 +402,11 @@ class ChapterEditor(tk.Frame):
         col = self.tree.identify_column(event.x)
         if not row_id:
             return
-        # col_idx = 0 if col == "#0" else int(col[1:])
         bbox = self.tree.bbox(row_id, col)
         if not bbox:
             return
         x, y, w, h = bbox
-        entry = tk.Entry(self.tree)
+        entry = tk.Entry(self.tree, justify="right" if col != "#0" else "left")
         entry.place(x=x, y=y, width=w, height=h)
         if col == "#0":
             old_val = self.tree.item(row_id, "text")
@@ -441,20 +422,20 @@ class ChapterEditor(tk.Frame):
             node = self.item_map.get(row_id)
             if not node:
                 return
+
             if col == "#0":
-                if new_val:
-                    node["title"] = new_val
+                if not new_val:
+                    return
+                node["title"] = new_val
             else:
                 try:
                     sec = parse_flexible_time(new_val)
+                    key = "start" if col == "#1" else "end"
+                    node[key] = sec
                 except ValueError:
-                    messagebox.showerror(
-                        "Tempo",
-                        "Formato hh:mm:ss, mm:ss ou somente dígitos",
-                    )
+                    messagebox.showerror("Tempo Inválido", "O formato do tempo deve ser hh:mm:ss, mm:ss ou apenas segundos.")
                     return
-                key = "start" if col == "#1" else "end"
-                node[key] = sec
+
             self._refresh_chap_tree()
             self.manager.save(self.chaps, self.casting)
 
@@ -526,10 +507,11 @@ class ChapterEditor(tk.Frame):
             new_val = entry.get().strip()
             entry.destroy()
             idx = self.cast_tree.index(row_id)
-            if new_val:
-                self.casting[idx] = new_val
-                self._refresh_cast_tree()
-                self.manager.save(self.chaps, self.casting)
+            if not new_val:
+                return
+            self.casting[idx] = new_val
+            self._refresh_cast_tree()
+            self.manager.save(self.chaps, self.casting)
 
         entry.bind("<Return>", commit)
         entry.bind("<Escape>", lambda *_: entry.destroy())
