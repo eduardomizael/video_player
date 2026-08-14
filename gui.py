@@ -84,9 +84,21 @@ class SettingsWindow(tk.Toplevel):
 
     def save(self) -> None:
         """Salva a configuração e avisa o chamador."""
-        self.config["update_ms"] = int(self.update_var.get() or 500)
-        self.config["small_jump"] = int(self.small_var.get() or 5)
-        self.config["large_jump"] = int(self.large_var.get() or 20)
+        try:
+            self.config["update_ms"] = int(self.update_var.get())
+        except ValueError:
+            self.config["update_ms"] = 500
+
+        try:
+            self.config["small_jump"] = int(self.small_var.get())
+        except ValueError:
+            self.config["small_jump"] = 5
+
+        try:
+            self.config["large_jump"] = int(self.large_var.get())
+        except ValueError:
+            self.config["large_jump"] = 20
+
         keys = self.config.setdefault("keys", {})
         for k, var in self.key_vars.items():
             val = var.get().strip() or keys.get(k, "")
@@ -200,11 +212,11 @@ class ChapterEditor(tk.Frame):
         self.notebook = ttk.Notebook(side)
         self.notebook.pack(fill="both", expand=True)
 
-        chap_tab = tk.Frame(self.notebook)
-        self.notebook.add(chap_tab, text="Capítulos")
+        chap_frame = tk.Frame(chap_tab)
+        chap_frame.pack(fill="both", expand=True, padx=4, pady=2)
 
         self.tree = ttk.Treeview(
-            chap_tab,
+            chap_frame,
             columns=("start", "end"),
             show="tree headings",
             selectmode="browse",
@@ -216,7 +228,11 @@ class ChapterEditor(tk.Frame):
         self.tree.column("#0", width=150, anchor="w")
         self.tree.column("start", width=80, anchor="e")
         self.tree.column("end", width=80, anchor="e")
-        self.tree.pack(fill="both", expand=True, padx=4, pady=2)
+
+        self.chap_scroll = ttk.Scrollbar(chap_frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=self.chap_scroll.set)
+        self.tree.pack(side="left", fill="both", expand=True)
+        self.chap_scroll.pack(side="right", fill="y")
 
         self.tree.bind("<<TreeviewSelect>>", self._jump_to_chapter)
         self.tree.bind("<Double-1>", self._inline_edit)
@@ -230,8 +246,11 @@ class ChapterEditor(tk.Frame):
         cast_tab = tk.Frame(self.notebook)
         self.notebook.add(cast_tab, text="Casting")
 
+        cast_frame = tk.Frame(cast_tab)
+        cast_frame.pack(fill="both", expand=True, padx=4, pady=2)
+
         self.cast_tree = ttk.Treeview(
-            cast_tab,
+            cast_frame,
             columns=("name",),
             show="headings",
             selectmode="browse",
@@ -239,7 +258,11 @@ class ChapterEditor(tk.Frame):
         )
         self.cast_tree.heading("name", text="Nome", anchor="w")
         self.cast_tree.column("name", width=200, anchor="w")
-        self.cast_tree.pack(fill="both", expand=True, padx=4, pady=2)
+
+        self.cast_scroll = ttk.Scrollbar(cast_frame, orient="vertical", command=self.cast_tree.yview)
+        self.cast_tree.configure(yscrollcommand=self.cast_scroll.set)
+        self.cast_tree.pack(side="left", fill="both", expand=True)
+        self.cast_scroll.pack(side="right", fill="y")
         self.cast_tree.bind("<Double-1>", self._inline_edit_cast)
 
         cast_btns = tk.Frame(cast_tab)
@@ -432,6 +455,10 @@ class ChapterEditor(tk.Frame):
                     sec = parse_flexible_time(new_val)
                     key = "start" if col == "#1" else "end"
                     node[key] = sec
+                    self.chaps.sort(key=lambda x: x["start"])
+                    for chap in self.chaps:
+                        if chap.get("subs"):
+                            chap["subs"].sort(key=lambda x: x["start"])
                 except ValueError:
                     messagebox.showerror("Tempo Inválido", "O formato do tempo deve ser hh:mm:ss, mm:ss ou apenas segundos.")
                     return
@@ -531,7 +558,7 @@ class ChapterEditor(tk.Frame):
             self.updater = None
 
     def _update_ui(self) -> None:
-        """Atualiza posição do slider e o rótulo de tempo."""
+        """Atualiza posição do slider, o rótulo de tempo e o ícone de reprodução."""
 
         dur = self.player.get_length()
         pos = self.player.get_time()
@@ -542,6 +569,12 @@ class ChapterEditor(tk.Frame):
             self.scale.config(command=lambda v: self._seek(int(v)))
             self.cur_time_lbl.config(text=fmt_sec(pos // 1000))
             self.total_time_lbl.config(text=fmt_sec(dur // 1000))
+
+        if self.player.is_playing():
+            self.play_pause_btn.config(text="❚❚")
+        else:
+            self.play_pause_btn.config(text="▶")
+
         self._start_update_loop()  # agenda o próximo
 
     # ------------- drag -------------
@@ -566,11 +599,20 @@ class ChapterEditor(tk.Frame):
         keys = self.config.get("keys", {})
         root = self.winfo_toplevel()
 
-        root.bind(keys.get("play_pause", "<space>"), lambda _: self._play_pause())
-        root.bind(keys.get("back_small", "<Left>"), lambda _: self._jump(-self.small_jump))
-        root.bind(keys.get("fwd_small", "<Right>"), lambda _: self._jump(self.small_jump))
-        root.bind(keys.get("back_large", "<Shift-Left>"), lambda _: self._jump(-self.large_jump))
-        root.bind(keys.get("fwd_large", "<Shift-Right>"), lambda _: self._jump(self.large_jump))
+        def safe_action(action: callable) -> callable:
+            def handler(_: tk.Event) -> None:
+                focus_w = root.focus_get()
+                if isinstance(focus_w, (tk.Entry, ttk.Entry)):
+                    return
+                action()
+
+            return handler
+
+        root.bind(keys.get("play_pause", "<space>"), safe_action(self._play_pause))
+        root.bind(keys.get("back_small", "<Left>"), safe_action(lambda: self._jump(-self.small_jump)))
+        root.bind(keys.get("fwd_small", "<Right>"), safe_action(lambda: self._jump(self.small_jump)))
+        root.bind(keys.get("back_large", "<Shift-Left>"), safe_action(lambda: self._jump(-self.large_jump)))
+        root.bind(keys.get("fwd_large", "<Shift-Right>"), safe_action(lambda: self._jump(self.large_jump)))
 
     def _play_pause(self) -> None:
         """Alterna entre reproduzir e pausar."""

@@ -1,3 +1,4 @@
+import os
 import sys
 import tkinter as tk
 from tkinter import filedialog, messagebox
@@ -81,7 +82,7 @@ def main() -> None:
 
     if video_arg:
         open_video(video_arg)
-    elif last_video_path:
+    elif last_video_path and os.path.exists(last_video_path):
         open_video(last_video_path)
     else:
         open_video()
