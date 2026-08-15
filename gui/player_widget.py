@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import os
 import tkinter as tk
+from tkinter import ttk
 import vlc
 
 from config import save_config
+from gui.rounded_button import RoundedButton
 from logic import fmt_sec
 
 
@@ -36,67 +38,127 @@ class PlayerWidget(tk.Frame):
         self.player.set_media(self.vlc.media_new(video_path))
         self.player.audio_set_volume(config.get("volume", 100))
 
-        # Canvas do vídeo
+        # Canvas do vídeo com recuo nas bordas
         self.canvas = tk.Canvas(self, bg="black")
-        self.canvas.pack(fill="both", expand=True)
+        self.canvas.pack(fill="both", expand=True, padx=6, pady=(4, 2))
 
-        # Barra de controles inferior
-        controls = tk.Frame(self)
-        controls.pack(fill="x")
+        # Barra de controles estilo VLC Media Player
+        vlc_bg = "#e8e8e8"
 
-        top_bar = tk.Frame(controls)
-        top_bar.pack(fill="x")
-        bottom_bar = tk.Frame(controls)
-        bottom_bar.pack(fill="x", pady=(4, 8))
+        controls = tk.Frame(self, bg=vlc_bg, bd=0, relief="flat")
+        controls.pack(fill="x", side="bottom", padx=6, pady=(0, 4))
 
-        self.cur_time_lbl = tk.Label(top_bar, text="00:00")
-        self.cur_time_lbl.pack(side="left")
-        self.total_time_lbl = tk.Label(top_bar, text="00:00")
-        self.total_time_lbl.pack(side="right")
+        top_bar = tk.Frame(controls, bg=vlc_bg)
+        top_bar.pack(fill="x", padx=8, pady=(4, 2))
+
+        bottom_bar = tk.Frame(controls, bg=vlc_bg)
+        bottom_bar.pack(fill="x", padx=8, pady=(2, 6))
+
+        self.cur_time_lbl = tk.Label(top_bar, text="00:00", bg=vlc_bg, fg="#111111", font=("Segoe UI", 9, "bold"))
+        self.cur_time_lbl.pack(side="left", padx=(0, 4))
+
+        self.total_time_lbl = tk.Label(top_bar, text="00:00", bg=vlc_bg, fg="#111111", font=("Segoe UI", 9, "bold"))
+        self.total_time_lbl.pack(side="right", padx=(4, 0))
+
         self.scale = tk.Scale(
             top_bar,
             from_=0,
             to=1000,
             showvalue=0,
             orient="horizontal",
-            length=400,
+            bg=vlc_bg,
+            troughcolor="#d0d0d0",
+            activebackground="#ffffff",
+            bd=0,
+            highlightthickness=0,
+            sliderlength=14,
             command=lambda v: self.seek(int(v)),
         )
-        self.scale.pack(side="left", fill="x", expand=True, padx=5)
+        self.scale.pack(side="left", fill="x", expand=True)
 
-        def create_button(parent: tk.Widget, text: str, command: callable, **kwargs) -> tk.Button:
-            btn = tk.Button(parent, text=text, command=command, **kwargs)
-            btn.pack(side="left")
+        # Estilo dos botões arredondados no estilo VLC
+        style = ttk.Style()
+        if "clam" in style.theme_names():
+            style.theme_use("clam")
+
+        style.configure(
+            "VLC.TButton",
+            font=("Segoe UI", 10, "bold"),
+            background="#ffffff",
+            foreground="#222222",
+            bordercolor="#b5b5b5",
+            lightcolor="#ffffff",
+            darkcolor="#dcdcdc",
+            borderwidth=1,
+            focuscolor="none",
+            padding=(6, 3),
+        )
+        style.map(
+            "VLC.TButton",
+            background=[("active", "#e0e0e0"), ("pressed", "#cecece")],
+            foreground=[("active", "#000000")],
+        )
+
+        style.configure("TNotebook", borderwidth=0, highlightthickness=0)
+        style.configure("Treeview", borderwidth=0, relief="flat")
+
+        def create_vlc_btn(parent: tk.Widget, text: str, command: callable, width: int = 45, height: int = 30) -> RoundedButton:
+            btn = RoundedButton(
+                parent,
+                text=text,
+                command=command,
+                width=width,
+                height=height,
+                radius=10,
+                bg_color="#ffffff",
+                hover_bg="#e4e4e4",
+                pressed_bg="#cecece",
+                border_color="#b8b8b8",
+                font=("Segoe UI", 10, "bold"),
+            )
+            btn.pack(side="left", padx=3)
             return btn
 
-        self.play_pause_btn = create_button(bottom_bar, "▶", self.toggle_play_pause, font=("Helvetica", 12, "bold"), width=4)
-        self.play_pause_btn.pack(side="left", padx=5)
+        self.play_pause_btn = create_vlc_btn(bottom_bar, "▶", self.toggle_play_pause, width=42, height=30)
+        self.stop_btn = create_vlc_btn(bottom_bar, "⏹", self.stop_video, width=36, height=30)
 
-        self.back_large_btn = create_button(bottom_bar, f"«{self.large_jump}s", lambda: self.jump(-self.large_jump))
-        self.back_small_btn = create_button(bottom_bar, f"‹{self.small_jump}s", lambda: self.jump(-self.small_jump))
+        tk.Label(bottom_bar, text=" ", bg=vlc_bg, width=1).pack(side="left")
 
-        self.separator_lbl = tk.Label(bottom_bar, text=" | ")
-        self.separator_lbl.pack(side="left")
+        self.back_large_btn = create_vlc_btn(bottom_bar, f"«{self.large_jump}s", lambda: self.jump(-self.large_jump), width=56, height=30)
+        self.back_small_btn = create_vlc_btn(bottom_bar, f"‹{self.small_jump}s", lambda: self.jump(-self.small_jump), width=52, height=30)
+        self.fwd_small_btn = create_vlc_btn(bottom_bar, f"{self.small_jump}s›", lambda: self.jump(self.small_jump), width=52, height=30)
+        self.fwd_large_btn = create_vlc_btn(bottom_bar, f"{self.large_jump}s»", lambda: self.jump(self.large_jump), width=56, height=30)
 
-        self.fwd_small_btn = create_button(bottom_bar, f"{self.small_jump}s›", lambda: self.jump(self.small_jump))
-        self.fwd_large_btn = create_button(bottom_bar, f"{self.large_jump}s»", lambda: self.jump(self.large_jump))
+        tk.Label(bottom_bar, text=" ", bg=vlc_bg, width=1).pack(side="left")
+        self.fullscreen_btn = create_vlc_btn(bottom_bar, "⛶", self.toggle_fullscreen, width=36, height=30)
 
-        # Controle de Volume
-        vol_frame = tk.Frame(bottom_bar)
-        vol_frame.pack(side="right")
+        # Controle de Volume à direita
+        vol_frame = tk.Frame(bottom_bar, bg=vlc_bg)
+        vol_frame.pack(side="right", padx=(0, 4))
+
+        self.volume_icon_lbl = tk.Label(vol_frame, text="🔊", bg=vlc_bg, font=("Segoe UI", 10))
+        self.volume_icon_lbl.pack(side="left", padx=(0, 2))
+
         self.volume_scale = tk.Scale(
             vol_frame,
             from_=0,
             to=100,
             orient="horizontal",
-            length=100,
+            length=90,
             showvalue=0,
+            bg=vlc_bg,
+            troughcolor="#d0d0d0",
+            activebackground="#ffffff",
+            bd=0,
+            highlightthickness=0,
+            sliderlength=12,
             command=self._change_volume,
         )
         self.volume_scale.set(config.get("volume", 100))
-        self.volume_scale.pack(side="left", padx=5)
-        self.volume_lbl = tk.Label(vol_frame, text=f"{self.volume_scale.get()}%")
-        self.volume_lbl.pack(side="left")
+        self.volume_scale.pack(side="left")
+
+        self.volume_lbl = tk.Label(vol_frame, text=f"{self.volume_scale.get()}%", bg=vlc_bg, fg="#333333", font=("Segoe UI", 8, "bold"))
+        self.volume_lbl.pack(side="left", padx=(2, 0))
 
         self.scale.bind("<ButtonPress-1>", self._drag_start)
         self.scale.bind("<ButtonRelease-1>", self._drag_end)
@@ -184,12 +246,34 @@ class PlayerWidget(tk.Frame):
             except Exception:
                 pass
 
+    def stop_video(self) -> None:
+        """Interrompe a reprodução do vídeo e reseta a barra de tempo."""
+        self.player.stop()
+        self.scale.config(command="")
+        self.scale.set(0)
+        self.scale.config(command=lambda v: self.seek(int(v)))
+        self.cur_time_lbl.config(text="00:00")
+        self.play_pause_btn.config(text="▶")
+
+    def toggle_fullscreen(self) -> None:
+        """Alterna entre modo tela cheia e janela normal."""
+        root = self.winfo_toplevel()
+        is_fs = root.attributes("-fullscreen")
+        root.attributes("-fullscreen", not is_fs)
+
     def _change_volume(self, val: str) -> None:
-        """Ajusta o volume do player e salva na configuração."""
+        """Ajusta o volume do player, atualiza o ícone e salva na configuração."""
         vol = int(float(val))
         self.player.audio_set_volume(vol)
         self.config["volume"] = vol
         self.volume_lbl.config(text=f"{vol}%")
+        if hasattr(self, "volume_icon_lbl"):
+            if vol == 0:
+                self.volume_icon_lbl.config(text="🔇")
+            elif vol < 50:
+                self.volume_icon_lbl.config(text="🔉")
+            else:
+                self.volume_icon_lbl.config(text="🔊")
         save_config(self.config)
 
     def update_ui_loop_step(self) -> None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from gui.rounded_button import RoundedButton
 from logic import fmt_sec, parse_flexible_time
 
 
@@ -28,7 +29,7 @@ class ChapterPanel(tk.Frame):
         self.on_jump_to_sec = on_jump_to_sec
         self.item_map: dict[str, dict] = {}
 
-        chap_frame = tk.Frame(self)
+        chap_frame = tk.Frame(self, bd=0, relief="flat")
         chap_frame.pack(fill="both", expand=True, padx=4, pady=2)
 
         self.tree = ttk.Treeview(
@@ -63,10 +64,10 @@ class ChapterPanel(tk.Frame):
         self.tree.bind("<Button-2>", self._show_context_menu)
 
         btns = tk.Frame(self)
-        btns.pack()
-        tk.Button(btns, text="+ adicionar", command=self.add_chapter).pack(side="left", padx=2)
-        tk.Button(btns, text="+ sub", command=self.add_subchapter).pack(side="left", padx=2)
-        tk.Button(btns, text="– remover", command=self.rm_chapter).pack(side="left", padx=2)
+        btns.pack(side="bottom", fill="x", pady=(4, 10), padx=6)
+        RoundedButton(btns, text="+ adicionar", command=self.add_chapter, width=82, height=30, radius=10).pack(side="left", padx=2)
+        RoundedButton(btns, text="+ sub", command=self.add_subchapter, width=54, height=30, radius=10).pack(side="left", padx=2)
+        RoundedButton(btns, text="– remover", command=self.rm_chapter, width=76, height=30, radius=10).pack(side="left", padx=2)
 
         self.refresh_chap_tree()
 

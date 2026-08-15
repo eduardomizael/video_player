@@ -48,7 +48,7 @@ class ChapterEditor(tk.Frame):
         self.player_widget.pack(side="left", fill="both", expand=True)
 
         # Painel lateral com abas (direita)
-        side_panel = tk.Frame(main_container, width=280, relief="groove", bd=1)
+        side_panel = tk.Frame(main_container, width=280, relief="flat", bd=0)
         side_panel.pack(side="right", fill="y")
 
         self.notebook = ttk.Notebook(side_panel)

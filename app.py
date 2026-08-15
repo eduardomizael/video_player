@@ -39,6 +39,63 @@ def reveal_in_explorer(file_path: str) -> None:
         subprocess.Popen(["xdg-open", os.path.dirname(norm_path)])
 
 
+class AboutDialog(tk.Toplevel):
+    """Janela modal detalhada com informações sobre a aplicação."""
+
+    def __init__(self, master: tk.Tk) -> None:
+        """Cria e posiciona o diálogo modal Sobre."""
+        super().__init__(master)
+        self.title("Sobre - Editor de Capítulos")
+        self.resizable(False, False)
+        self.transient(master)
+        self.attributes("-topmost", True)
+
+        main_frame = tk.Frame(self, padx=24, pady=20)
+        main_frame.pack(fill="both", expand=True)
+
+        title_lbl = tk.Label(
+            main_frame,
+            text="Editor de Capítulos e Legendas",
+            font=("Segoe UI", 14, "bold"),
+            fg="#005a9e",
+        )
+        title_lbl.pack(pady=(0, 4))
+
+        version_lbl = tk.Label(
+            main_frame,
+            text="Versão 1.2.0",
+            font=("Segoe UI", 9, "italic"),
+            fg="#666666",
+        )
+        version_lbl.pack(pady=(0, 12))
+
+        desc_text = (
+            "Aplicativo desktop completo para reprodução de vídeos, edição de capítulos,\n"
+            "gerenciamento de legendas (.srt com tempo estendido) e elenco (casting).\n\n"
+            "Desenvolvido com Python 3.12, Tkinter e VLC Media Player."
+        )
+        desc_lbl = tk.Label(main_frame, text=desc_text, font=("Segoe UI", 9), justify="center")
+        desc_lbl.pack(pady=(0, 16))
+
+        btn = tk.Button(
+            main_frame,
+            text="OK",
+            command=self.destroy,
+            width=10,
+            cursor="hand2",
+            font=("Segoe UI", 9, "bold"),
+        )
+        btn.pack()
+
+        self.grab_set()
+        self.update_idletasks()
+        width = self.winfo_width()
+        height = self.winfo_height()
+        x = master.winfo_x() + (master.winfo_width() - width) // 2
+        y = master.winfo_y() + (master.winfo_height() - height) // 2
+        self.geometry(f"{width}x{height}+{max(0, x)}+{max(0, y)}")
+
+
 def main() -> None:
     """Inicializa a interface gráfica e executa o aplicativo."""
     if not check_vlc_installed():
@@ -59,6 +116,16 @@ def main() -> None:
     root.title("Editor de Capítulos")
 
     config = load_config()
+
+    # Aplica configuração de Sempre no Topo (Always on Top)
+    always_on_top_var = tk.BooleanVar(value=config.get("always_on_top", False))
+    root.attributes("-topmost", always_on_top_var.get())
+
+    def toggle_always_on_top() -> None:
+        val = always_on_top_var.get()
+        root.attributes("-topmost", val)
+        config["always_on_top"] = val
+        save_config(config)
 
     # Função para centralizar a janela na tela se não houver posição salva
     def center_window(width: int = 1050, height: int = 650) -> None:
@@ -83,7 +150,7 @@ def main() -> None:
     last_video_path = config.get("last_video", "")
 
     # Barra superior com o caminho do vídeo selecionável e o botão do explorador
-    path_frame = tk.Frame(root, bd=1, relief="groove")
+    path_frame = tk.Frame(root, bd=0, relief="flat")
     path_frame.pack(fill="x", side="top", padx=4, pady=(4, 2))
 
     tk.Label(path_frame, text=" Arquivo: ").pack(side="left")
@@ -125,14 +192,36 @@ def main() -> None:
         """Exibe a janela de configurações."""
         SettingsWindow(root, config, lambda: editor.update_config(config) if editor else None)
 
+    def show_about() -> None:
+        """Exibe a janela modal Sobre."""
+        AboutDialog(root)
+
     menubar = tk.Menu(root)
+
+    # Menu Arquivo
     file_menu = tk.Menu(menubar, tearoff=0)
     file_menu.add_command(label="Abrir vídeo", command=lambda: open_video())
     file_menu.add_separator()
     file_menu.add_command(label="Sair", command=root.quit)
     menubar.add_cascade(label="Arquivo", menu=file_menu)
 
+    # Menu Exibir
+    view_menu = tk.Menu(menubar, tearoff=0)
+    view_menu.add_checkbutton(
+        label="Sempre no topo",
+        variable=always_on_top_var,
+        command=toggle_always_on_top,
+    )
+    menubar.add_cascade(label="Exibir", menu=view_menu)
+
+    # Menu Configurações
     menubar.add_command(label="Configurações", command=show_settings)
+
+    # Menu Ajuda
+    help_menu = tk.Menu(menubar, tearoff=0)
+    help_menu.add_command(label="Sobre", command=show_about)
+    menubar.add_cascade(label="Ajuda", menu=help_menu)
+
     root.config(menu=menubar)
 
     # Verifica se foi passado um arquivo de vídeo via argumento

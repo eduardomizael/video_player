@@ -6,6 +6,9 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 
+from gui.rounded_button import RoundedButton
+
+
 class CastPanel(tk.Frame):
     """Painel de elenco (casting) com Treeview, Scrollbar e edição inline."""
 
@@ -16,7 +19,7 @@ class CastPanel(tk.Frame):
         self.casting = casting
         self.on_save = on_save
 
-        cast_frame = tk.Frame(self)
+        cast_frame = tk.Frame(self, bd=0, relief="flat")
         cast_frame.pack(fill="both", expand=True, padx=4, pady=2)
 
         self.cast_tree = ttk.Treeview(
@@ -36,9 +39,9 @@ class CastPanel(tk.Frame):
         self.cast_tree.bind("<Double-1>", self._inline_edit_cast)
 
         cast_btns = tk.Frame(self)
-        cast_btns.pack()
-        tk.Button(cast_btns, text="+ adicionar", command=self.add_cast).pack(side="left", padx=2)
-        tk.Button(cast_btns, text="– remover", command=self.rm_cast).pack(side="left", padx=2)
+        cast_btns.pack(side="bottom", fill="x", pady=(4, 10), padx=6)
+        RoundedButton(cast_btns, text="+ adicionar", command=self.add_cast, width=82, height=30, radius=10).pack(side="left", padx=2)
+        RoundedButton(cast_btns, text="– remover", command=self.rm_cast, width=76, height=30, radius=10).pack(side="left", padx=2)
 
         self.refresh_cast_tree()
 
