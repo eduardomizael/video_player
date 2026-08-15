@@ -1,19 +1,20 @@
-"""Widget principal do editor integrando player, painéis de capítulos/casting e atalhos."""
+"""Widget principal do editor integrando player, painéis de capítulos, legendas, casting e atalhos."""
 
 from __future__ import annotations
 
 import tkinter as tk
 from tkinter import ttk
 
-from logic import ChapterManager
+from logic import ChapterManager, SubtitleManager
 
 from gui.cast_panel import CastPanel
 from gui.chapter_panel import ChapterPanel
 from gui.player_widget import PlayerWidget
+from gui.subtitle_panel import SubtitlePanel
 
 
 class ChapterEditor(tk.Frame):
-    """Widget Tkinter principal que sintetiza player VLC, capítulos e casting."""
+    """Widget Tkinter principal que sintetiza player VLC, capítulos, legendas (.srt) e casting."""
 
     def __init__(self, master: tk.Tk, video_path: str, config: dict) -> None:
         """Inicializa o editor para o vídeo informado."""
@@ -24,11 +25,14 @@ class ChapterEditor(tk.Frame):
         self.config = config
         self.update_ms = config.get("update_ms", 500)
 
-        # Gerenciador de persistência
+        # Gerenciadores de persistência
         self.manager = ChapterManager(video_path)
+        self.sub_manager = SubtitleManager(video_path)
+
         data = self.manager.load()
         self.chaps: list[dict] = data.get("chapters", [])
         self.casting: list[str] = data.get("casting", [])
+        self.subtitles: list[dict] = self.sub_manager.load()
 
         main_container = tk.Frame(self)
         main_container.pack(fill="both", expand=True)
@@ -44,7 +48,7 @@ class ChapterEditor(tk.Frame):
         self.player_widget.pack(side="left", fill="both", expand=True)
 
         # Painel lateral com abas (direita)
-        side_panel = tk.Frame(main_container, width=260, relief="groove", bd=1)
+        side_panel = tk.Frame(main_container, width=280, relief="groove", bd=1)
         side_panel.pack(side="right", fill="y")
 
         self.notebook = ttk.Notebook(side_panel)
@@ -62,6 +66,18 @@ class ChapterEditor(tk.Frame):
         )
         self.chap_panel.pack(fill="both", expand=True)
 
+        # Aba de Legendas
+        sub_tab = tk.Frame(self.notebook)
+        self.notebook.add(sub_tab, text="Legendas")
+        self.sub_panel = SubtitlePanel(
+            sub_tab,
+            subtitles=self.subtitles,
+            on_save=self.save_subtitles,
+            get_current_time_ms=self.player_widget.get_current_time_ms,
+            on_jump_to_ms=self.player_widget.set_time_ms,
+        )
+        self.sub_panel.pack(fill="both", expand=True)
+
         # Aba de Casting
         cast_tab = tk.Frame(self.notebook)
         self.notebook.add(cast_tab, text="Casting")
@@ -76,6 +92,14 @@ class ChapterEditor(tk.Frame):
         self._start_update_loop()
         self._bind_keys()
 
+        # Carrega a legenda no VLC se já existir arquivo .srt
+        self.after(500, self._load_initial_subtitles)
+
+    def _load_initial_subtitles(self) -> None:
+        """Carrega a legenda no player VLC ao iniciar."""
+        if self.subtitles:
+            self.player_widget.set_subtitle_file(self.sub_manager.srt_path)
+
     def destroy(self) -> None:
         """Interrompe a reprodução e libera recursos do player."""
         self._stop_update_loop()
@@ -86,6 +110,11 @@ class ChapterEditor(tk.Frame):
     def save_data(self) -> None:
         """Persiste os capítulos e casting atuais no arquivo JSON."""
         self.manager.save(self.chaps, self.casting)
+
+    def save_subtitles(self) -> None:
+        """Persiste as legendas atuais no arquivo .srt e atualiza no VLC."""
+        self.sub_manager.save(self.subtitles)
+        self.player_widget.set_subtitle_file(self.sub_manager.srt_path)
 
     def update_config(self, config: dict) -> None:
         """Aplica as configurações atualizadas aos submódulos."""

@@ -160,9 +160,29 @@ class PlayerWidget(tk.Frame):
         """Move o vídeo para um segundo específico."""
         self.player.set_time(sec * 1000)
 
+    def set_time_ms(self, ms: int) -> None:
+        """Move o vídeo para um tempo específico em milissegundos."""
+        self.player.set_time(ms)
+
     def get_current_time_seconds(self) -> int:
         """Retorna o tempo atual em segundos."""
         return self.player.get_time() // 1000
+
+    def get_current_time_ms(self) -> int:
+        """Retorna o tempo atual em milissegundos."""
+        return self.player.get_time()
+
+    def set_subtitle_file(self, srt_path: str) -> None:
+        """Carrega e força o recarregamento dinâmico da legenda .srt no VLC em tempo real."""
+        if os.path.exists(srt_path):
+            abs_path = os.path.abspath(srt_path)
+            self.player.video_set_subtitle_file(abs_path)
+            try:
+                import pathlib
+                uri = pathlib.Path(abs_path).as_uri()
+                self.player.add_slave(vlc.MediaSlaveType.subtitle, uri, True)
+            except Exception:
+                pass
 
     def _change_volume(self, val: str) -> None:
         """Ajusta o volume do player e salva na configuração."""

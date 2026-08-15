@@ -1,21 +1,22 @@
 # Video Player/Editor
 
-Aplicativo simples escrito em Python 3.12 que usa `python-vlc` para reprodu\u00e7\u00e3o de v\u00eddeos. Permite adicionar e editar cap\u00edtulos de arquivos MP4.
+Aplicativo simples escrito em Python 3.12 que usa `python-vlc` para reprodução de vídeos. Permite adicionar e editar capítulos de arquivos MP4.
 
 ## Recursos
 
-- Abrir v\u00eddeos e editar cap\u00edtulos
+- Abrir vídeos e editar capítulos
 - Cada capítulo pode ter subitens que herdam o tempo do pai
+- Editor de Legendas padrão `.srt` com tempo estendido (milissegundos) e exibição nativa em tempo real no player VLC
 - Aba adicional para editar lista de casting
 - Menu para abrir novos arquivos
 - Arquivo `config.json` armazena:
-  - Intervalo de atualiza\u00e7\u00e3o da interface
-  - Tempo dos saltos r\u00e1pidos (curto e longo)
-  - Teclas de atalho para play/pause e avan\u00e7o/retrocesso
-  - N\u00edvel de volume do player
-- Bot\u00f5es de avan\u00e7ar/retroceder
-- Controles reorganizados em duas linhas com tempo e barra de progresso na parte superior e bot\u00f5es de reprodu\u00e7\u00e3o na inferior
-- Tela de configura\u00e7\u00f5es para definir atalhos (basta pressionar a tecla desejada)
+  - Intervalo de atualização da interface
+  - Tempo dos saltos rápidos (curto e longo)
+  - Teclas de atalho para play/pause e avanço/retrocesso
+  - Nível de volume do player
+- Botões de avançar/retroceder
+- Controles reorganizados em duas linhas com tempo e barra de progresso na parte superior e botões de reprodução na inferior
+- Tela de configurações para definir atalhos (basta pressionar a tecla desejada)
 
 ## Instalação
 
