@@ -1,14 +1,15 @@
-"""Testes unitários para o gerenciador e utilitários de legendas .srt (logic.py)."""
+"""Testes dos utilitários e da persistência segura de legendas SRT."""
 
-import os
-import tempfile
+from pathlib import Path
+
 import pytest
 
-from logic import SubtitleManager, fmt_srt_time, parse_srt_time
+from logic import DataLoadError, SubtitleManager, fmt_srt_time, parse_srt_time
 
 
 def test_fmt_srt_time() -> None:
-    """Testa a conversão de milissegundos para string no formato SRT hh:mm:ss,mss."""
+    """Testa a formatação de milissegundos para SRT."""
+
     assert fmt_srt_time(0) == "00:00:00,000"
     assert fmt_srt_time(1500) == "00:00:01,500"
     assert fmt_srt_time(3665450) == "01:01:05,450"
@@ -16,43 +17,42 @@ def test_fmt_srt_time() -> None:
 
 
 def test_parse_srt_time() -> None:
-    """Testa a conversão de strings de tempo estendido em milissegundos."""
+    """Testa formatos SRT válidos e milissegundos inválidos."""
+
     assert parse_srt_time("00:00:01,500") == 1500
     assert parse_srt_time("01:01:05,450") == 3665450
     assert parse_srt_time("01:05,500") == 65500
     assert parse_srt_time("10") == 10000
-
     with pytest.raises(ValueError):
-        parse_srt_time("invalid:time,val")
+        parse_srt_time("00:00:01,1234")
 
 
-def test_subtitle_manager_load_save() -> None:
-    """Testa o carregamento e salvamento de arquivos de legenda .srt."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        video_path = os.path.join(tmpdir, "movie.mp4")
-        srt_path = os.path.join(tmpdir, "movie.srt")
+def test_subtitle_manager_load_save_preserva_quebras_de_linha(tmp_path: Path) -> None:
+    """Testa ida e volta sem remover quebras internas do texto."""
 
-        sub_manager = SubtitleManager(video_path)
-        assert sub_manager.srt_path == srt_path
+    manager = SubtitleManager(str(tmp_path / "video.mp4"))
+    subtitles = [{"start": 1000, "end": 2500, "text": "Primeira linha\nSegunda linha"}]
+    manager.save(subtitles)
+    assert manager.load() == subtitles
 
-        # Sem arquivo existente deve retornar lista vazia
-        assert sub_manager.load() == []
 
-        # Salva legendas de teste
-        subs = [
-            {"start": 1000, "end": 4000, "text": "Primeira legenda de teste"},
-            {"start": 5000, "end": 9500, "text": "Segunda legenda de teste"},
-        ]
-        sub_manager.save(subs)
+def test_subtitle_manager_preserva_backup(tmp_path: Path) -> None:
+    """Mantém a versão anterior da legenda antes de substituí-la."""
 
-        assert os.path.exists(srt_path)
+    manager = SubtitleManager(str(tmp_path / "video.mp4"))
+    manager.save([{"start": 0, "end": 1000, "text": "Anterior"}])
+    manager.save([{"start": 1000, "end": 2000, "text": "Nova"}])
+    assert "Anterior" in (tmp_path / "video.srt.bak").read_text(encoding="utf-8")
 
-        # Recarrega e valida o conteúdo do .srt
-        loaded_subs = sub_manager.load()
-        assert len(loaded_subs) == 2
-        assert loaded_subs[0]["start"] == 1000
-        assert loaded_subs[0]["end"] == 4000
-        assert loaded_subs[0]["text"] == "Primeira legenda de teste"
-        assert loaded_subs[1]["start"] == 5000
-        assert loaded_subs[1]["end"] == 9500
-        assert loaded_subs[1]["text"] == "Segunda legenda de teste"
+
+def test_subtitle_manager_rejeita_bloco_invalido_sem_sobrescrever(tmp_path: Path) -> None:
+    """Garante que um bloco inválido não seja descartado silenciosamente."""
+
+    srt_path = tmp_path / "video.srt"
+    original = "1\n00:00:02,000 --> 00:00:01,000\nInválida\n"
+    srt_path.write_text(original, encoding="utf-8")
+    manager = SubtitleManager(str(tmp_path / "video.mp4"))
+
+    with pytest.raises(DataLoadError):
+        manager.load()
+    assert srt_path.read_text(encoding="utf-8") == original

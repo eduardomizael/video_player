@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import messagebox, ttk
 
 from gui.rounded_button import RoundedButton
@@ -16,9 +17,9 @@ class SubtitlePanel(tk.Frame):
         self,
         master: tk.Widget,
         subtitles: list[dict],
-        on_save: callable,
-        get_current_time_ms: callable,
-        on_jump_to_ms: callable,
+        on_save: Callable[[], None],
+        get_current_time_ms: Callable[[], int],
+        on_jump_to_ms: Callable[[int], None],
     ) -> None:
         """Inicializa o painel de legendas."""
 
@@ -100,6 +101,15 @@ class SubtitlePanel(tk.Frame):
             self.tree.focus(found_id)
             self.tree.see(found_id)
 
+    @staticmethod
+    def _validate_interval(start_ms: int, end_ms: int) -> bool:
+        """Valida se uma legenda possui intervalo temporal não negativo e ordenado."""
+
+        if start_ms < 0 or end_ms < start_ms:
+            messagebox.showerror("Intervalo inválido", "O fim da legenda não pode ser anterior ao início.")
+            return False
+        return True
+
     def add_subtitle(self) -> None:
         """Cria uma nova entrada de legenda na posição atual de reprodução."""
         cur_ms = self.get_current_time_ms()
@@ -159,6 +169,8 @@ class SubtitlePanel(tk.Frame):
         if not node:
             return
         cur_ms = self.get_current_time_ms()
+        if not self._validate_interval(cur_ms, node["end"]):
+            return
         node["start"] = cur_ms
         self.subtitles.sort(key=lambda x: x["start"])
         self.refresh_sub_tree()
@@ -173,6 +185,8 @@ class SubtitlePanel(tk.Frame):
         if not node:
             return
         cur_ms = self.get_current_time_ms()
+        if not self._validate_interval(node["start"], cur_ms):
+            return
         node["end"] = cur_ms
         self.refresh_sub_tree()
         self.on_save()
@@ -206,6 +220,10 @@ class SubtitlePanel(tk.Frame):
                 try:
                     ms = parse_srt_time(new_val)
                     key = "start" if col == "#1" else "end"
+                    start_ms = ms if key == "start" else node["start"]
+                    end_ms = ms if key == "end" else node["end"]
+                    if not self._validate_interval(start_ms, end_ms):
+                        return
                     node[key] = ms
                     self.subtitles.sort(key=lambda x: x["start"])
                 except ValueError:
