@@ -11,6 +11,7 @@ Aplicativo simples escrito em Python 3.12 que usa `python-vlc` para reprodução
 - O fim dos capítulos pais é ampliado automaticamente quando um descendente termina depois deles
 - Editor de Legendas padrão `.srt` com tempo estendido (milissegundos) e exibição nativa em tempo real no player VLC
 - Aba adicional para editar lista de casting
+- Aba de metadados em árvore, com chave e valor; somente folhas podem ter valor e, ao criar um filho, o valor do pai é transferido para ele
 - Menu para abrir novos arquivos
 - Arquivo `config.json`, mantido ao lado do `app.py` ou do executável, armazena:
   - Intervalo de atualização da interface

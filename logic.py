@@ -127,6 +127,36 @@ def _validate_chapter(chapter: object, location: str, parent: dict[str, Any] | N
     return normalized
 
 
+def _validate_metadata(items: object, location: str = "metadados") -> list[dict[str, Any]]:
+    """Valida nós de metadados, permitindo valores apenas nas folhas."""
+
+    if not isinstance(items, list):
+        raise TypeError(f"{location} deve ser uma lista")
+
+    normalized: list[dict[str, Any]] = []
+    keys: set[str] = set()
+    for index, item in enumerate(items, start=1):
+        item_location = f"{location}, item {index}"
+        if not isinstance(item, dict):
+            raise TypeError(f"{item_location} não é um objeto")
+        key = item.get("key")
+        value = item.get("value", "")
+        children = item.get("children", [])
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError(f"{item_location} possui chave inválida")
+        key = key.strip()
+        if key in keys:
+            raise ValueError(f"{location} possui chaves repetidas: '{key}'")
+        if not isinstance(value, str):
+            raise TypeError(f"{item_location} possui valor inválido")
+        normalized_children = _validate_metadata(children, f"{item_location} ({key})")
+        if normalized_children and value:
+            raise ValueError(f"{item_location} possui filhos e não pode ter valor")
+        keys.add(key)
+        normalized.append({"key": key, "value": value, "children": normalized_children})
+    return normalized
+
+
 class ChapterManager:
     """Gerencia carregamento e salvamento de dados de um vídeo."""
 
@@ -140,7 +170,7 @@ class ChapterManager:
 
         path = Path(self.json_path)
         if not path.exists():
-            return {"chapters": [], "casting": []}
+            return {"chapters": [], "casting": [], "metadata": []}
         try:
             with path.open("r", encoding="utf-8") as file_handle:
                 loaded = json.load(file_handle)
@@ -150,9 +180,11 @@ class ChapterManager:
         if isinstance(loaded, list):
             chapters = loaded
             casting: object = []
+            metadata: object = []
         elif isinstance(loaded, dict):
             chapters = loaded.get("chapters", [])
             casting = loaded.get("casting", [])
+            metadata = loaded.get("metadata", [])
         else:
             raise DataLoadError(path, "a raiz do JSON deve ser um objeto ou uma lista")
         if not isinstance(chapters, list):
@@ -163,12 +195,17 @@ class ChapterManager:
             validated_chapters = [
                 _validate_chapter(chapter, f"capítulo {index}") for index, chapter in enumerate(chapters, start=1)
             ]
+            validated_metadata = _validate_metadata(metadata)
         except (TypeError, ValueError) as exc:
             raise DataLoadError(path, str(exc)) from exc
-        return {"chapters": validated_chapters, "casting": [name.strip() for name in casting]}
+        return {
+            "chapters": validated_chapters,
+            "casting": [name.strip() for name in casting],
+            "metadata": validated_metadata,
+        }
 
-    def save(self, chapters: list[dict], casting: list[str]) -> None:
-        """Valida e grava capítulos e casting de forma atômica."""
+    def save(self, chapters: list[dict], casting: list[str], metadata: list[dict] | None = None) -> None:
+        """Valida e grava capítulos, casting e metadados de forma atômica."""
 
         try:
             validated = [
@@ -178,8 +215,18 @@ class ChapterManager:
             raise ValueError(f"Os capítulos não foram salvos: {exc}") from exc
         if any(not isinstance(name, str) or not name.strip() for name in casting):
             raise ValueError("O casting não foi salvo porque contém um nome inválido")
+        try:
+            validated_metadata = _validate_metadata([] if metadata is None else metadata)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Os metadados não foram salvos: {exc}") from exc
         content = json.dumps(
-            {"chapters": validated, "casting": [name.strip() for name in casting]}, ensure_ascii=False, indent=2
+            {
+                "chapters": validated,
+                "casting": [name.strip() for name in casting],
+                "metadata": validated_metadata,
+            },
+            ensure_ascii=False,
+            indent=2,
         )
         _atomic_write_text(Path(self.json_path), f"{content}\n")
 

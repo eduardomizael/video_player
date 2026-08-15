@@ -8,6 +8,7 @@ import pytest
 
 from gui import ChapterEditor, SettingsWindow
 from gui.chapter_panel import ChapterPanel
+from gui.metadata_panel import MetadataPanel
 from gui.player_widget import PlayerWidget
 from gui.settings_dialog import SettingsWindow as DirectSettingsWindow
 
@@ -173,3 +174,23 @@ def test_adicionar_capitulo_cria_irmao_do_selecionado() -> None:
     assert len(root_chapter["subs"]) == 2
     assert root_chapter["subs"][1]["start"] == 18
     assert root_chapter["end"] == 28
+
+
+def test_adicionar_filho_transfere_valor_do_metadado() -> None:
+    """Move o valor do pai para o novo filho, que permanece uma folha."""
+
+    node = {"key": "autor", "value": "Eduardo", "children": []}
+    panel = object.__new__(MetadataPanel)
+    panel.metadata = [node]
+    panel.item_map = {"root": node}
+    panel.tree = Mock()
+    panel.tree.selection.return_value = ("root",)
+    panel.refresh_tree = Mock()
+    panel.on_save = Mock()
+
+    panel.add_child()
+
+    assert node["value"] == ""
+    assert node["children"] == [{"key": "chave_1", "value": "Eduardo", "children": []}]
+    panel.refresh_tree.assert_called_once_with(node["children"][0])
+    panel.on_save.assert_called_once()

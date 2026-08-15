@@ -56,7 +56,7 @@ def test_chapter_manager_load_save(tmp_path: Path) -> None:
     chapters = [{"title": "Capítulo 1", "start": 0, "end": 60, "subs": []}]
     casting = ["Ator A", "Ator B"]
     manager.save(chapters, casting)
-    assert manager.load() == {"chapters": chapters, "casting": casting}
+    assert manager.load() == {"chapters": chapters, "casting": casting, "metadata": []}
 
     manager.save(chapters, ["Ator C"])
     backup = tmp_path / "video.json.bak"
@@ -126,3 +126,25 @@ def test_chapter_manager_expande_fim_dos_ancestrais(tmp_path: Path) -> None:
     child = parent["subs"][0]
     assert child["end"] == 40
     assert parent["end"] == 40
+
+
+def test_chapter_manager_persiste_metadados_hierarquicos(tmp_path: Path) -> None:
+    """Salva metadados no JSON dos capítulos e aceita valores apenas nas folhas."""
+
+    manager = ChapterManager(str(tmp_path / "video.mp4"))
+    metadata = [{"key": "autor", "value": "", "children": [{"key": "nome", "value": "Eduardo", "children": []}]}]
+
+    manager.save([], [], metadata)
+
+    assert manager.load()["metadata"] == metadata
+    saved = json.loads((tmp_path / "video.json").read_text(encoding="utf-8"))
+    assert saved["metadata"] == metadata
+
+
+def test_chapter_manager_rejeita_valor_em_metadado_com_filhos(tmp_path: Path) -> None:
+    """Impede persistência de um valor em nó que deixou de ser folha."""
+
+    metadata = [{"key": "autor", "value": "Eduardo", "children": [{"key": "nome", "value": "", "children": []}]}]
+
+    with pytest.raises(ValueError, match="metadados"):
+        ChapterManager(str(tmp_path / "video.mp4")).save([], [], metadata)

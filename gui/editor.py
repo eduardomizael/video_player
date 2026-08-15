@@ -8,6 +8,7 @@ from tkinter import messagebox, ttk
 
 from gui.cast_panel import CastPanel
 from gui.chapter_panel import ChapterPanel
+from gui.metadata_panel import MetadataPanel
 from gui.player_widget import PlayerWidget
 from gui.subtitle_panel import SubtitlePanel
 from logic import ChapterManager, SubtitleManager
@@ -31,6 +32,7 @@ class ChapterEditor(tk.Frame):
         self.update_ms = config.get("update_ms", 500)
         self.chaps: list[dict] = data["chapters"]
         self.casting: list[str] = data["casting"]
+        self.metadata: list[dict] = data["metadata"]
         self.subtitles: list[dict] = subtitles
         self.bound_shortcuts: list[tuple[str, str]] = []
 
@@ -88,6 +90,11 @@ class ChapterEditor(tk.Frame):
         )
         self.cast_panel.pack(fill="both", expand=True)
 
+        metadata_tab = tk.Frame(self.notebook)
+        self.notebook.add(metadata_tab, text="Metadados")
+        self.metadata_panel = MetadataPanel(metadata_tab, metadata=self.metadata, on_save=self.save_data)
+        self.metadata_panel.pack(fill="both", expand=True)
+
         self.updater: str | None = None
         self._start_update_loop()
         self._bind_keys()
@@ -118,7 +125,7 @@ class ChapterEditor(tk.Frame):
     def save_data(self) -> None:
         """Persiste os capítulos e casting atuais no arquivo JSON."""
         try:
-            self.manager.save(self.chaps, self.casting)
+            self.manager.save(self.chaps, self.casting, self.metadata)
         except (OSError, TypeError, ValueError) as exc:
             messagebox.showerror("Dados não salvos", str(exc))
 
