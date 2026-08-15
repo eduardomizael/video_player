@@ -1,6 +1,7 @@
 """Testes para verificações auxiliares do app.py."""
 
 import tkinter as tk
+
 from app import AboutDialog, check_vlc_installed, reveal_in_explorer
 
 
@@ -15,11 +16,8 @@ def test_reveal_in_explorer_nonexistent_file() -> None:
     reveal_in_explorer("non_existent_file.mp4")
 
 
-def test_about_dialog_creation() -> None:
+def test_about_dialog_creation(tk_root: tk.Tk) -> None:
     """Testa se a janela modal AboutDialog pode ser criada e destruída sem erros."""
-    root = tk.Tk()
-    root.withdraw()
-    dialog = AboutDialog(root)
+    dialog = AboutDialog(tk_root)
     assert dialog.winfo_exists()
     dialog.destroy()
-    root.destroy()

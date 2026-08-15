@@ -5,11 +5,14 @@ Aplicativo simples escrito em Python 3.12 que usa `python-vlc` para reprodução
 ## Recursos
 
 - Abrir vídeos e editar capítulos
-- Cada capítulo pode ter subitens que herdam o tempo do pai
+- Capítulos e subcapítulos podem ter níveis hierárquicos ilimitados
+- O botão de capítulo cria um irmão do item selecionado; o botão de subcapítulo cria um filho direto
+- Irmãos são ordenados pelo início e podem se sobrepor livremente
+- O fim dos capítulos pais é ampliado automaticamente quando um descendente termina depois deles
 - Editor de Legendas padrão `.srt` com tempo estendido (milissegundos) e exibição nativa em tempo real no player VLC
 - Aba adicional para editar lista de casting
 - Menu para abrir novos arquivos
-- Arquivo `config.json` armazena:
+- Arquivo `config.json`, mantido ao lado do `app.py` ou do executável, armazena:
   - Intervalo de atualização da interface
   - Tempo dos saltos rápidos (curto e longo)
   - Teclas de atalho para play/pause e avanço/retrocesso
@@ -19,15 +22,21 @@ Aplicativo simples escrito em Python 3.12 que usa `python-vlc` para reprodução
 - Controles reorganizados em duas linhas com tempo e barra de progresso na parte superior e botões de reprodução na inferior
 - Ações de adicionar e remover posicionadas no topo dos painéis, com seleção automática do item recém-criado
 - Tela de configurações para definir atalhos (basta pressionar a tecla desejada)
+- Validação dos intervalos de capítulos, subcapítulos e legendas antes do salvamento
+- Salvamento atômico dos arquivos, com cópia `.bak` dos capítulos e legendas anteriores
+- Preservação de configurações corrompidas em um arquivo `.corrompido_*.bak` antes de restaurar os padrões
 
 ## Instalação
 
 1. Certifique-se de ter o Python 3.12 instalado.
-2. Instale a dependência `python-vlc` com `pip install python-vlc`.
+2. Instale as dependências com `uv sync --dev`.
 
 ## Uso
 
 Execute `python app.py` (ou `uv run python app.py`) para iniciar o programa e escolha o vídeo que deseja editar.
+
+O `config.json` é resolvido pelo local da aplicação, independentemente do diretório em que o comando foi executado. No
+modo fonte ele fica ao lado de `app.py`; no executável ele fica ao lado de `EditorDeCapitulos.exe`.
 
 ## Gerando Executável (.exe)
 

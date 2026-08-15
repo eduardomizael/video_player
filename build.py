@@ -26,7 +26,7 @@ def build_exe() -> None:
     ]
 
     print(f"[BUILD] Executando: {' '.join(cmd)}\n")
-    result = subprocess.run(cmd)
+    result = subprocess.run(cmd, check=False)
 
     if result.returncode == 0:
         exe_path = os.path.abspath(os.path.join("dist", f"{app_name}.exe"))
