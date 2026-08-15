@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import messagebox, ttk
-
 
 from gui.rounded_button import RoundedButton
 
@@ -12,7 +12,7 @@ from gui.rounded_button import RoundedButton
 class CastPanel(tk.Frame):
     """Painel de elenco (casting) com Treeview, Scrollbar e edição inline."""
 
-    def __init__(self, master: tk.Widget, casting: list[str], on_save: callable) -> None:
+    def __init__(self, master: tk.Widget, casting: list[str], on_save: Callable[[], None]) -> None:
         """Inicializa o painel de casting."""
 
         super().__init__(master)

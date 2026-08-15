@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import ttk
-
-from logic import ChapterManager, SubtitleManager
+from collections.abc import Callable
+from tkinter import messagebox, ttk
 
 from gui.cast_panel import CastPanel
 from gui.chapter_panel import ChapterPanel
 from gui.player_widget import PlayerWidget
 from gui.subtitle_panel import SubtitlePanel
+from logic import ChapterManager, SubtitleManager
 
 
 class ChapterEditor(tk.Frame):
@@ -19,20 +19,20 @@ class ChapterEditor(tk.Frame):
     def __init__(self, master: tk.Tk, video_path: str, config: dict) -> None:
         """Inicializa o editor para o vídeo informado."""
 
+        self.manager = ChapterManager(video_path)
+        self.sub_manager = SubtitleManager(video_path)
+        data = self.manager.load()
+        subtitles = self.sub_manager.load()
+
         super().__init__(master)
         self.pack(fill="both", expand=True)
 
-        self.config = config
+        self.app_config = config
         self.update_ms = config.get("update_ms", 500)
-
-        # Gerenciadores de persistência
-        self.manager = ChapterManager(video_path)
-        self.sub_manager = SubtitleManager(video_path)
-
-        data = self.manager.load()
-        self.chaps: list[dict] = data.get("chapters", [])
-        self.casting: list[str] = data.get("casting", [])
-        self.subtitles: list[dict] = self.sub_manager.load()
+        self.chaps: list[dict] = data["chapters"]
+        self.casting: list[str] = data["casting"]
+        self.subtitles: list[dict] = subtitles
+        self.bound_shortcuts: list[tuple[str, str]] = []
 
         main_container = tk.Frame(self)
         main_container.pack(fill="both", expand=True)
@@ -88,43 +88,63 @@ class ChapterEditor(tk.Frame):
         )
         self.cast_panel.pack(fill="both", expand=True)
 
-        self.updater = None
+        self.updater: str | None = None
         self._start_update_loop()
         self._bind_keys()
 
         # Carrega a legenda no VLC se já existir arquivo .srt
-        self.after(500, self._load_initial_subtitles)
+        self.initial_subtitle_after: str | None = self.after(500, self._load_initial_subtitles)
 
     def _load_initial_subtitles(self) -> None:
         """Carrega a legenda no player VLC ao iniciar."""
+        self.initial_subtitle_after = None
         if self.subtitles:
-            self.player_widget.set_subtitle_file(self.sub_manager.srt_path)
+            try:
+                self.player_widget.set_subtitle_file(self.sub_manager.srt_path)
+            except RuntimeError as exc:
+                messagebox.showwarning("Legenda não carregada", str(exc))
 
     def destroy(self) -> None:
         """Interrompe a reprodução e libera recursos do player."""
         self._stop_update_loop()
+        self._unbind_keys()
+        if self.initial_subtitle_after:
+            self.after_cancel(self.initial_subtitle_after)
+            self.initial_subtitle_after = None
         if hasattr(self, "player_widget"):
             self.player_widget.destroy()
         super().destroy()
 
     def save_data(self) -> None:
         """Persiste os capítulos e casting atuais no arquivo JSON."""
-        self.manager.save(self.chaps, self.casting)
+        try:
+            self.manager.save(self.chaps, self.casting)
+        except (OSError, TypeError, ValueError) as exc:
+            messagebox.showerror("Dados não salvos", str(exc))
 
     def save_subtitles(self) -> None:
         """Persiste as legendas atuais no arquivo .srt e atualiza no VLC."""
-        self.sub_manager.save(self.subtitles)
-        self.player_widget.set_subtitle_file(self.sub_manager.srt_path)
+        try:
+            self.sub_manager.save(self.subtitles)
+        except (OSError, TypeError, ValueError) as exc:
+            messagebox.showerror("Legendas não salvas", str(exc))
+            return
+        try:
+            self.player_widget.set_subtitle_file(self.sub_manager.srt_path)
+        except RuntimeError as exc:
+            messagebox.showwarning("Legenda salva, mas não recarregada", str(exc))
 
     def update_config(self, config: dict) -> None:
         """Aplica as configurações atualizadas aos submódulos."""
-        self.config = config
+        self.app_config = config
         self.update_ms = config.get("update_ms", self.update_ms)
         self.player_widget.update_config(config)
         self._bind_keys()
 
     def _start_update_loop(self) -> None:
         """Agenda a atualização periódica da interface."""
+        if self.updater is not None:
+            return
         self.updater = self.after(self.update_ms, self._update_ui)
 
     def _stop_update_loop(self) -> None:
@@ -135,15 +155,25 @@ class ChapterEditor(tk.Frame):
 
     def _update_ui(self) -> None:
         """Passo de atualização contínua da interface."""
+        self.updater = None
         self.player_widget.update_ui_loop_step()
         self._start_update_loop()
 
+    def _unbind_keys(self) -> None:
+        """Remove apenas os atalhos globais registrados por este editor."""
+
+        root = self.winfo_toplevel()
+        for sequence, function_id in self.bound_shortcuts:
+            root.unbind(sequence, function_id)
+        self.bound_shortcuts.clear()
+
     def _bind_keys(self) -> None:
         """Configura os atalhos de teclado globais."""
-        keys = self.config.get("keys", {})
+        self._unbind_keys()
+        keys = self.app_config.get("keys", {})
         root = self.winfo_toplevel()
 
-        def safe_action(action: callable) -> callable:
+        def safe_action(action: Callable[[], None]) -> Callable[[tk.Event], None]:
             def handler(_: tk.Event) -> None:
                 focus_w = root.focus_get()
                 if isinstance(focus_w, (tk.Entry, ttk.Entry)):
@@ -153,8 +183,14 @@ class ChapterEditor(tk.Frame):
             return handler
 
         p_w = self.player_widget
-        root.bind(keys.get("play_pause") or "<space>", safe_action(p_w.toggle_play_pause))
-        root.bind(keys.get("back_small") or "<Left>", safe_action(lambda: p_w.jump(-p_w.small_jump)))
-        root.bind(keys.get("fwd_small") or "<Right>", safe_action(lambda: p_w.jump(p_w.small_jump)))
-        root.bind(keys.get("back_large") or "<Shift-Left>", safe_action(lambda: p_w.jump(-p_w.large_jump)))
-        root.bind(keys.get("fwd_large") or "<Shift-Right>", safe_action(lambda: p_w.jump(p_w.large_jump)))
+        bindings = [
+            (keys.get("play_pause") or "<space>", safe_action(p_w.toggle_play_pause)),
+            (keys.get("back_small") or "<Left>", safe_action(lambda: p_w.jump(-p_w.small_jump))),
+            (keys.get("fwd_small") or "<Right>", safe_action(lambda: p_w.jump(p_w.small_jump))),
+            (keys.get("back_large") or "<Shift-Left>", safe_action(lambda: p_w.jump(-p_w.large_jump))),
+            (keys.get("fwd_large") or "<Shift-Right>", safe_action(lambda: p_w.jump(p_w.large_jump))),
+        ]
+        for sequence, handler in bindings:
+            function_id = root.bind(sequence, handler)
+            if function_id:
+                self.bound_shortcuts.append((sequence, function_id))

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import sys
 import tkinter as tk
+from collections.abc import Callable
+from tkinter import messagebox
 
 from config import save_config
 
@@ -11,12 +13,12 @@ from config import save_config
 class SettingsWindow(tk.Toplevel):
     """Diálogo simples para editar e salvar as configurações."""
 
-    def __init__(self, master: tk.Tk, config: dict, on_save: callable) -> None:
+    def __init__(self, master: tk.Tk, config: dict, on_save: Callable[[], None]) -> None:
         """Cria a janela com a configuração atual."""
 
         super().__init__(master)
         self.title("Configurações")
-        self.config = config
+        self.app_config = config
         self.on_save = on_save
 
         # Configurar janela modal e sempre no topo
@@ -84,24 +86,30 @@ class SettingsWindow(tk.Toplevel):
     def save(self) -> None:
         """Salva a configuração e avisa o chamador."""
         try:
-            self.config["update_ms"] = int(self.update_var.get())
+            update_ms = int(self.update_var.get())
+            small_jump = int(self.small_var.get())
+            large_jump = int(self.large_var.get())
         except ValueError:
-            self.config["update_ms"] = 500
+            messagebox.showerror("Valores inválidos", "Atualização e saltos devem ser números inteiros.", parent=self)
+            return
+        if not 50 <= update_ms <= 60_000:
+            messagebox.showerror("Atualização inválida", "Use um intervalo entre 50 e 60000 ms.", parent=self)
+            return
+        if not 1 <= small_jump <= 3_600 or not 1 <= large_jump <= 3_600:
+            messagebox.showerror("Salto inválido", "Use saltos entre 1 e 3600 segundos.", parent=self)
+            return
 
+        self.app_config["update_ms"] = update_ms
+        self.app_config["small_jump"] = small_jump
+        self.app_config["large_jump"] = large_jump
+        keys = self.app_config.setdefault("keys", {})
+        for key, variable in self.key_vars.items():
+            value = variable.get().strip() or keys.get(key, "")
+            keys[key] = value
         try:
-            self.config["small_jump"] = int(self.small_var.get())
-        except ValueError:
-            self.config["small_jump"] = 5
-
-        try:
-            self.config["large_jump"] = int(self.large_var.get())
-        except ValueError:
-            self.config["large_jump"] = 20
-
-        keys = self.config.setdefault("keys", {})
-        for k, var in self.key_vars.items():
-            val = var.get().strip() or keys.get(k, "")
-            keys[k] = val
-        save_config(self.config)
+            save_config(self.app_config)
+        except OSError as exc:
+            messagebox.showerror("Configuração não salva", str(exc), parent=self)
+            return
         self.on_save()
         self.destroy()

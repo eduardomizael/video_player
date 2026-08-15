@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import messagebox, ttk
 
 from gui.rounded_button import RoundedButton
@@ -16,9 +17,9 @@ class ChapterPanel(tk.Frame):
         self,
         master: tk.Widget,
         chaps: list[dict],
-        on_save: callable,
-        get_current_time: callable,
-        on_jump_to_sec: callable,
+        on_save: Callable[[], None],
+        get_current_time: Callable[[], int],
+        on_jump_to_sec: Callable[[int], None],
     ) -> None:
         """Inicializa o painel de capítulos."""
 
@@ -105,14 +106,72 @@ class ChapterPanel(tk.Frame):
             self.tree.focus(found_id)
             self.tree.see(found_id)
 
+    def _sort_chapters(self, chapters: list[dict] | None = None) -> None:
+        """Ordena capítulos e subcapítulos recursivamente pelo início."""
+
+        items = self.chaps if chapters is None else chapters
+        items.sort(key=lambda chapter: chapter["start"])
+        for chapter in items:
+            self._sort_chapters(chapter.get("subs", []))
+
+    def _expand_parent_ends(self, parent_id: str, child_end: int) -> None:
+        """Amplia o fim do pai e de seus ancestrais sem reduzi-los automaticamente."""
+
+        current_parent_id = parent_id
+        required_end = child_end
+        while current_parent_id:
+            parent = self.item_map.get(current_parent_id)
+            if parent is None:
+                return
+            parent["end"] = max(parent["end"], required_end)
+            required_end = parent["end"]
+            current_parent_id = self.tree.parent(current_parent_id)
+
+    @staticmethod
+    def _expand_to_children(node: dict) -> None:
+        """Garante que o fim do capítulo contenha o maior fim de seus filhos diretos."""
+
+        children = node.get("subs", [])
+        if children:
+            node["end"] = max(node["end"], *(child["end"] for child in children))
+
+    def _validate_interval(self, item_id: str, node: dict, start: int, end: int) -> bool:
+        """Valida a ordem temporal e os limites hierárquicos de um capítulo."""
+
+        if start < 0 or end < start:
+            messagebox.showerror("Intervalo inválido", "O fim do capítulo não pode ser anterior ao início.")
+            return False
+        parent_id = self.tree.parent(item_id)
+        parent = self.item_map.get(parent_id) if parent_id else None
+        if parent and start < parent["start"]:
+            messagebox.showerror("Intervalo inválido", "O subcapítulo não pode começar antes do capítulo pai.")
+            return False
+        if any(sub["start"] < start for sub in node.get("subs", [])):
+            messagebox.showerror("Intervalo inválido", "O início informado deixaria um subcapítulo antes do pai.")
+            return False
+        return True
+
     def add_chapter(self) -> None:
-        """Cria um novo capítulo na posição atual de reprodução."""
+        """Cria um irmão do item selecionado ou um capítulo raiz sem seleção."""
+
+        selection = self.tree.selection()
+        parent_id = self.tree.parent(selection[0]) if selection else ""
+        parent = self.item_map.get(parent_id) if parent_id else None
+        siblings = parent.setdefault("subs", []) if parent else self.chaps
         cur_sec = self.get_current_time()
-        title = f"Capítulo {len(self.chaps) + 1}"
+        if parent and cur_sec < parent["start"]:
+            messagebox.showerror(
+                "Posição inválida", "Posicione o vídeo no início do capítulo pai ou em um tempo posterior."
+            )
+            return
+        title_prefix = "Sub" if parent else "Capítulo"
+        title = f"{title_prefix} {len(siblings) + 1}"
         end_sec = cur_sec + 10
         new_chap = {"title": title, "start": cur_sec, "end": end_sec, "subs": []}
-        self.chaps.append(new_chap)
-        self.chaps.sort(key=lambda x: x["start"])
+        siblings.append(new_chap)
+        if parent_id:
+            self._expand_parent_ends(parent_id, end_sec)
+        self._sort_chapters()
         self.refresh_chap_tree(select_chap=new_chap)
         self.on_save()
 
@@ -126,14 +185,19 @@ class ChapterPanel(tk.Frame):
         if target is None:
             return
         parent = target
-        if item not in self.tree.get_children(""):
-            parent_id = self.tree.parent(item)
-            parent = self.item_map.get(parent_id, target)
         subs = parent.setdefault("subs", [])
         title = f"Sub {len(subs) + 1}"
         cur_sec = self.get_current_time()
-        new_sub = {"title": title, "start": cur_sec, "end": parent["end"]}
+        if cur_sec < parent["start"]:
+            messagebox.showerror(
+                "Posição inválida", "Posicione o vídeo no início do capítulo selecionado ou em um tempo posterior."
+            )
+            return
+        end_sec = max(parent["end"], cur_sec + 10)
+        new_sub = {"title": title, "start": cur_sec, "end": end_sec, "subs": []}
         subs.append(new_sub)
+        self._expand_parent_ends(item, end_sec)
+        self._sort_chapters()
         self.refresh_chap_tree(select_chap=new_sub)
         self.on_save()
 
@@ -147,15 +211,19 @@ class ChapterPanel(tk.Frame):
         if node is None:
             return
         parent_id = self.tree.parent(item)
+        removed = False
         if not parent_id:
             if messagebox.askyesno("Remover", f"Excluir '{node['title']}'?"):
                 self.chaps.remove(node)
+                removed = True
         else:
             parent_node = self.item_map.get(parent_id)
             if parent_node and messagebox.askyesno("Remover", f"Excluir '{node['title']}'?"):
                 parent_node.get("subs", []).remove(node)
-        self.refresh_chap_tree()
-        self.on_save()
+                removed = True
+        if removed:
+            self.refresh_chap_tree()
+            self.on_save()
 
     def _on_tree_left_click(self, event: tk.Event) -> None:
         """Leva a reprodução para o início do capítulo clicado com o botão esquerdo."""
@@ -191,11 +259,11 @@ class ChapterPanel(tk.Frame):
         if not node:
             return
         cur_sec = self.get_current_time()
+        if not self._validate_interval(sel[0], node, cur_sec, node["end"]):
+            return
         node["start"] = cur_sec
-        self.chaps.sort(key=lambda x: x["start"])
-        for chap in self.chaps:
-            if chap.get("subs"):
-                chap["subs"].sort(key=lambda x: x["start"])
+        self._expand_parent_ends(self.tree.parent(sel[0]), node["end"])
+        self._sort_chapters()
         self.refresh_chap_tree()
         self.on_save()
 
@@ -208,7 +276,11 @@ class ChapterPanel(tk.Frame):
         if not node:
             return
         cur_sec = self.get_current_time()
+        if not self._validate_interval(sel[0], node, node["start"], cur_sec):
+            return
         node["end"] = cur_sec
+        self._expand_to_children(node)
+        self._expand_parent_ends(self.tree.parent(sel[0]), node["end"])
         self.refresh_chap_tree()
         self.on_save()
 
@@ -246,11 +318,14 @@ class ChapterPanel(tk.Frame):
                 try:
                     sec = parse_flexible_time(new_val)
                     key = "start" if col == "#1" else "end"
+                    start = sec if key == "start" else node["start"]
+                    end = sec if key == "end" else node["end"]
+                    if not self._validate_interval(row_id, node, start, end):
+                        return
                     node[key] = sec
-                    self.chaps.sort(key=lambda x: x["start"])
-                    for chap in self.chaps:
-                        if chap.get("subs"):
-                            chap["subs"].sort(key=lambda x: x["start"])
+                    self._expand_to_children(node)
+                    self._expand_parent_ends(self.tree.parent(row_id), node["end"])
+                    self._sort_chapters()
                 except ValueError:
                     messagebox.showerror(
                         "Tempo Inválido", "O formato do tempo deve ser hh:mm:ss, mm:ss ou apenas segundos."

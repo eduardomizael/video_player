@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Callable
 
 
 class RoundedButton(tk.Canvas):
@@ -12,7 +13,7 @@ class RoundedButton(tk.Canvas):
         self,
         master: tk.Widget,
         text: str,
-        command: callable,
+        command: Callable[[], None],
         width: int = 54,
         height: int = 28,
         radius: int = 10,
@@ -30,8 +31,8 @@ class RoundedButton(tk.Canvas):
         if hasattr(master, "cget"):
             try:
                 bg_parent = master.cget("bg")
-            except Exception:
-                pass
+            except tk.TclError:
+                bg_parent = "#e8e8e8"
 
         super().__init__(
             master,
