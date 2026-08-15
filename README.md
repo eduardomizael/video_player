@@ -12,6 +12,8 @@ Aplicativo simples escrito em Python 3.12 que usa `python-vlc` para reprodução
 - Editor de Legendas padrão `.srt` com tempo estendido (milissegundos) e exibição nativa em tempo real no player VLC
 - Aba adicional para editar lista de casting
 - Aba de metadados em árvore, com chave e valor; somente folhas podem ter valor e, ao criar um filho, o valor do pai é transferido para ele
+- Aba de imagens: recorte por posicionamento e zoom, abertura de arquivo ou colagem da área de transferência e associação de imagens a capítulos, elenco ou metadados
+- Arquivo `.chp` (SQLite) por vídeo para capítulos, elenco, metadados e imagens; imagens são armazenadas como dados binários recortados, sem manter o original
 - Menu para abrir novos arquivos
 - Arquivo `config.json`, mantido ao lado do `app.py` ou do executável, armazena:
   - Intervalo de atualização da interface
@@ -24,7 +26,7 @@ Aplicativo simples escrito em Python 3.12 que usa `python-vlc` para reprodução
 - Ações de adicionar e remover posicionadas no topo dos painéis, com seleção automática do item recém-criado
 - Tela de configurações para definir atalhos (basta pressionar a tecla desejada)
 - Validação dos intervalos de capítulos, subcapítulos e legendas antes do salvamento
-- Salvamento atômico dos arquivos, com cópia `.bak` dos capítulos e legendas anteriores
+- Salvamento atômico das legendas, com cópia `.bak` da versão anterior; os dados `.chp` são gravados em transações SQLite
 - Preservação de configurações corrompidas em um arquivo `.corrompido_*.bak` antes de restaurar os padrões
 
 ## Instalação
@@ -35,6 +37,8 @@ Aplicativo simples escrito em Python 3.12 que usa `python-vlc` para reprodução
 ## Uso
 
 Execute `python app.py` (ou `uv run python app.py`) para iniciar o programa e escolha o vídeo que deseja editar.
+
+Ao salvar informações de um vídeo, o aplicativo cria um arquivo `.chp` ao lado dele. Esse arquivo é SQLite e substitui o uso padrão do JSON. Arquivos JSON existentes não são convertidos automaticamente nesta versão.
 
 O `config.json` é resolvido pelo local da aplicação, independentemente do diretório em que o comando foi executado. No
 modo fonte ele fica ao lado de `app.py`; no executável ele fica ao lado de `EditorDeCapitulos.exe`.

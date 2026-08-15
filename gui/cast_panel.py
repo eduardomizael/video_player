@@ -12,7 +12,7 @@ from gui.rounded_button import RoundedButton
 class CastPanel(tk.Frame):
     """Painel de elenco (casting) com Treeview, Scrollbar e edição inline."""
 
-    def __init__(self, master: tk.Widget, casting: list[str], on_save: Callable[[], None]) -> None:
+    def __init__(self, master: tk.Widget, casting: list[dict], on_save: Callable[[], None]) -> None:
         """Inicializa o painel de casting."""
 
         super().__init__(master)
@@ -53,8 +53,8 @@ class CastPanel(tk.Frame):
         """Atualiza a lista de casting e foca o item selecionado."""
         self.cast_tree.delete(*self.cast_tree.get_children())
         found_id = None
-        for i, name in enumerate(self.casting):
-            item_id = self.cast_tree.insert("", "end", values=(name,))
+        for i, member in enumerate(self.casting):
+            item_id = self.cast_tree.insert("", "end", values=(member["name"],))
             if i == select_idx:
                 found_id = item_id
 
@@ -65,7 +65,7 @@ class CastPanel(tk.Frame):
 
     def add_cast(self) -> None:
         """Adiciona um novo nome à lista de casting."""
-        self.casting.append("Novo nome")
+        self.casting.append({"name": "Novo nome", "images": []})
         new_idx = len(self.casting) - 1
         self.refresh_cast_tree(select_idx=new_idx)
         self.on_save()
@@ -76,7 +76,7 @@ class CastPanel(tk.Frame):
         if not sel:
             return
         idx = self.cast_tree.index(sel[0])
-        if messagebox.askyesno("Remover", f"Excluir '{self.casting[idx]}'?"):
+        if messagebox.askyesno("Remover", f"Excluir '{self.casting[idx]['name']}'?"):
             self.casting.pop(idx)
             self.refresh_cast_tree()
             self.on_save()
@@ -103,7 +103,7 @@ class CastPanel(tk.Frame):
             idx = self.cast_tree.index(row_id)
             if not new_val:
                 return
-            self.casting[idx] = new_val
+            self.casting[idx]["name"] = new_val
             self.refresh_cast_tree()
             self.on_save()
 

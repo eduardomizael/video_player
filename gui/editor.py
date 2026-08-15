@@ -8,6 +8,7 @@ from tkinter import messagebox, ttk
 
 from gui.cast_panel import CastPanel
 from gui.chapter_panel import ChapterPanel
+from gui.image_panel import ImagePanel
 from gui.metadata_panel import MetadataPanel
 from gui.player_widget import PlayerWidget
 from gui.subtitle_panel import SubtitlePanel
@@ -31,8 +32,9 @@ class ChapterEditor(tk.Frame):
         self.app_config = config
         self.update_ms = config.get("update_ms", 500)
         self.chaps: list[dict] = data["chapters"]
-        self.casting: list[str] = data["casting"]
+        self.casting: list[dict] = data["casting"]
         self.metadata: list[dict] = data["metadata"]
+        self.images: list[dict] = data["images"]
         self.subtitles: list[dict] = subtitles
         self.bound_shortcuts: list[tuple[str, str]] = []
 
@@ -95,6 +97,16 @@ class ChapterEditor(tk.Frame):
         self.metadata_panel = MetadataPanel(metadata_tab, metadata=self.metadata, on_save=self.save_data)
         self.metadata_panel.pack(fill="both", expand=True)
 
+        images_tab = tk.Frame(self.notebook)
+        self.notebook.add(images_tab, text="Imagens")
+        self.image_panel = ImagePanel(
+            images_tab,
+            images=self.images,
+            get_records=self._get_image_records,
+            on_save=self.save_data,
+        )
+        self.image_panel.pack(fill="both", expand=True)
+
         self.updater: str | None = None
         self._start_update_loop()
         self._bind_keys()
@@ -125,7 +137,7 @@ class ChapterEditor(tk.Frame):
     def save_data(self) -> None:
         """Persiste os capítulos e casting atuais no arquivo JSON."""
         try:
-            self.manager.save(self.chaps, self.casting, self.metadata)
+            self.manager.save(self.chaps, self.casting, self.metadata, self.images)
         except (OSError, TypeError, ValueError) as exc:
             messagebox.showerror("Dados não salvos", str(exc))
 
@@ -140,6 +152,28 @@ class ChapterEditor(tk.Frame):
             self.player_widget.set_subtitle_file(self.sub_manager.srt_path)
         except RuntimeError as exc:
             messagebox.showwarning("Legenda salva, mas não recarregada", str(exc))
+
+    def _get_image_records(self) -> list[tuple[str, dict, str]]:
+        """Lista todos os registros que podem receber imagens associadas."""
+
+        records: list[tuple[str, dict, str]] = []
+
+        def add_chapters(nodes: list[dict], prefix: str = "") -> None:
+            for node in nodes:
+                label = f"Capítulo: {prefix}{node['title']}"
+                records.append(("chapters", node, label))
+                add_chapters(node["subs"], f"{prefix}{node['title']} › ")
+
+        def add_metadata(nodes: list[dict], prefix: str = "") -> None:
+            for node in nodes:
+                label = f"Metadado: {prefix}{node['key']}"
+                records.append(("metadata", node, label))
+                add_metadata(node["children"], f"{prefix}{node['key']} › ")
+
+        add_chapters(self.chaps)
+        add_metadata(self.metadata)
+        records.extend(("casting", member, f"Elenco: {member['name']}") for member in self.casting)
+        return records
 
     def update_config(self, config: dict) -> None:
         """Aplica as configurações atualizadas aos submódulos."""
