@@ -1,6 +1,5 @@
 """Testes unitários para o módulo logic.py (fmt_sec, parse_flexible_time e ChapterManager)."""
 
-import json
 import os
 import tempfile
 import pytest

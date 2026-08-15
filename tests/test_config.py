@@ -1,6 +1,5 @@
 """Testes unitários para o módulo config.py (carregamento, salvamento e mesclagem de configurações)."""
 
-import json
 import os
 import tempfile
 

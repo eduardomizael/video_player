@@ -160,4 +160,3 @@ class SubtitleManager:
 
         with open(self.srt_path, "w", encoding="utf-8") as fh:
             fh.write("\n\n".join(blocks) + "\n")
-

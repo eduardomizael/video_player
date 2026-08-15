@@ -23,5 +23,3 @@ def test_about_dialog_creation() -> None:
     assert dialog.winfo_exists()
     dialog.destroy()
     root.destroy()
-
-
