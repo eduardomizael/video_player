@@ -16,6 +16,7 @@ Aplicativo simples escrito em Python 3.12 que usa `python-vlc` para reprodução
   - Nível de volume do player
 - Botões de avançar/retroceder
 - Controles reorganizados em duas linhas com tempo e barra de progresso na parte superior e botões de reprodução na inferior
+- Ações de adicionar e remover posicionadas no topo dos painéis, com seleção automática do item recém-criado
 - Tela de configurações para definir atalhos (basta pressionar a tecla desejada)
 
 ## Instalação

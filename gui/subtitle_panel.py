@@ -29,8 +29,17 @@ class SubtitlePanel(tk.Frame):
         self.on_jump_to_ms = on_jump_to_ms
         self.item_map: dict[str, dict] = {}
 
+        btns = tk.Frame(self)
+        btns.pack(side="top", fill="x", pady=(6, 4), padx=6)
+        RoundedButton(btns, text="+ adicionar", command=self.add_subtitle, width=82, height=30, radius=10).pack(
+            side="left", padx=2
+        )
+        RoundedButton(btns, text="– remover", command=self.rm_subtitle, width=76, height=30, radius=10).pack(
+            side="left", padx=2
+        )
+
         sub_frame = tk.Frame(self, bd=0, relief="flat")
-        sub_frame.pack(fill="both", expand=True, padx=4, pady=2)
+        sub_frame.pack(fill="both", expand=True, padx=4, pady=(2, 4))
 
         self.tree = ttk.Treeview(
             sub_frame,
@@ -64,17 +73,13 @@ class SubtitlePanel(tk.Frame):
         self.tree.bind("<Button-3>", self._show_context_menu)
         self.tree.bind("<Button-2>", self._show_context_menu)
 
-        btns = tk.Frame(self)
-        btns.pack(side="bottom", fill="x", pady=(4, 10), padx=6)
-        RoundedButton(btns, text="+ adicionar", command=self.add_subtitle, width=82, height=30, radius=10).pack(side="left", padx=2)
-        RoundedButton(btns, text="– remover", command=self.rm_subtitle, width=76, height=30, radius=10).pack(side="left", padx=2)
-
         self.refresh_sub_tree()
 
-    def refresh_sub_tree(self) -> None:
-        """Atualiza a árvore com a lista de legendas."""
+    def refresh_sub_tree(self, select_sub: dict | None = None) -> None:
+        """Atualiza a árvore com a lista de legendas e foca o item selecionado."""
         self.tree.delete(*self.tree.get_children())
         self.item_map = {}
+        found_id = None
 
         for sub in self.subtitles:
             item_id = self.tree.insert(
@@ -87,6 +92,13 @@ class SubtitlePanel(tk.Frame):
                 ),
             )
             self.item_map[item_id] = sub
+            if sub is select_sub:
+                found_id = item_id
+
+        if found_id:
+            self.tree.selection_set(found_id)
+            self.tree.focus(found_id)
+            self.tree.see(found_id)
 
     def add_subtitle(self) -> None:
         """Cria uma nova entrada de legenda na posição atual de reprodução."""
@@ -96,7 +108,7 @@ class SubtitlePanel(tk.Frame):
         new_sub = {"start": cur_ms, "end": end_ms, "text": text}
         self.subtitles.append(new_sub)
         self.subtitles.sort(key=lambda x: x["start"])
-        self.refresh_sub_tree()
+        self.refresh_sub_tree(select_sub=new_sub)
         self.on_save()
 
     def rm_subtitle(self) -> None:

@@ -29,8 +29,20 @@ class ChapterPanel(tk.Frame):
         self.on_jump_to_sec = on_jump_to_sec
         self.item_map: dict[str, dict] = {}
 
+        btns = tk.Frame(self)
+        btns.pack(side="top", fill="x", pady=(6, 4), padx=6)
+        RoundedButton(btns, text="+ adicionar", command=self.add_chapter, width=82, height=30, radius=10).pack(
+            side="left", padx=2
+        )
+        RoundedButton(btns, text="+ sub", command=self.add_subchapter, width=54, height=30, radius=10).pack(
+            side="left", padx=2
+        )
+        RoundedButton(btns, text="– remover", command=self.rm_chapter, width=76, height=30, radius=10).pack(
+            side="left", padx=2
+        )
+
         chap_frame = tk.Frame(self, bd=0, relief="flat")
-        chap_frame.pack(fill="both", expand=True, padx=4, pady=2)
+        chap_frame.pack(fill="both", expand=True, padx=4, pady=(2, 4))
 
         self.tree = ttk.Treeview(
             chap_frame,
@@ -63,20 +75,16 @@ class ChapterPanel(tk.Frame):
         self.tree.bind("<Button-3>", self._show_context_menu)
         self.tree.bind("<Button-2>", self._show_context_menu)
 
-        btns = tk.Frame(self)
-        btns.pack(side="bottom", fill="x", pady=(4, 10), padx=6)
-        RoundedButton(btns, text="+ adicionar", command=self.add_chapter, width=82, height=30, radius=10).pack(side="left", padx=2)
-        RoundedButton(btns, text="+ sub", command=self.add_subchapter, width=54, height=30, radius=10).pack(side="left", padx=2)
-        RoundedButton(btns, text="– remover", command=self.rm_chapter, width=76, height=30, radius=10).pack(side="left", padx=2)
-
         self.refresh_chap_tree()
 
-    def refresh_chap_tree(self) -> None:
-        """Atualiza a árvore com a lista de capítulos."""
+    def refresh_chap_tree(self, select_chap: dict | None = None) -> None:
+        """Atualiza a árvore com a lista de capítulos e foca o item selecionado."""
         self.tree.delete(*self.tree.get_children())
         self.item_map = {}
+        found_id = None
 
         def add_items(parent: str, items: list[dict]) -> None:
+            nonlocal found_id
             for chap in items:
                 item_id = self.tree.insert(
                     parent,
@@ -86,18 +94,26 @@ class ChapterPanel(tk.Frame):
                     open=True,
                 )
                 self.item_map[item_id] = chap
+                if chap is select_chap:
+                    found_id = item_id
                 add_items(item_id, chap.get("subs", []))
 
         add_items("", self.chaps)
+
+        if found_id:
+            self.tree.selection_set(found_id)
+            self.tree.focus(found_id)
+            self.tree.see(found_id)
 
     def add_chapter(self) -> None:
         """Cria um novo capítulo na posição atual de reprodução."""
         cur_sec = self.get_current_time()
         title = f"Capítulo {len(self.chaps) + 1}"
         end_sec = cur_sec + 10
-        self.chaps.append({"title": title, "start": cur_sec, "end": end_sec, "subs": []})
+        new_chap = {"title": title, "start": cur_sec, "end": end_sec, "subs": []}
+        self.chaps.append(new_chap)
         self.chaps.sort(key=lambda x: x["start"])
-        self.refresh_chap_tree()
+        self.refresh_chap_tree(select_chap=new_chap)
         self.on_save()
 
     def add_subchapter(self) -> None:
@@ -116,8 +132,9 @@ class ChapterPanel(tk.Frame):
         subs = parent.setdefault("subs", [])
         title = f"Sub {len(subs) + 1}"
         cur_sec = self.get_current_time()
-        subs.append({"title": title, "start": cur_sec, "end": parent["end"]})
-        self.refresh_chap_tree()
+        new_sub = {"title": title, "start": cur_sec, "end": parent["end"]}
+        subs.append(new_sub)
+        self.refresh_chap_tree(select_chap=new_sub)
         self.on_save()
 
     def rm_chapter(self) -> None:
@@ -235,7 +252,9 @@ class ChapterPanel(tk.Frame):
                         if chap.get("subs"):
                             chap["subs"].sort(key=lambda x: x["start"])
                 except ValueError:
-                    messagebox.showerror("Tempo Inválido", "O formato do tempo deve ser hh:mm:ss, mm:ss ou apenas segundos.")
+                    messagebox.showerror(
+                        "Tempo Inválido", "O formato do tempo deve ser hh:mm:ss, mm:ss ou apenas segundos."
+                    )
                     return
 
             self.refresh_chap_tree()

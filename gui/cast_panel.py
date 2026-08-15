@@ -19,8 +19,17 @@ class CastPanel(tk.Frame):
         self.casting = casting
         self.on_save = on_save
 
+        cast_btns = tk.Frame(self)
+        cast_btns.pack(side="top", fill="x", pady=(6, 4), padx=6)
+        RoundedButton(cast_btns, text="+ adicionar", command=self.add_cast, width=82, height=30, radius=10).pack(
+            side="left", padx=2
+        )
+        RoundedButton(cast_btns, text="– remover", command=self.rm_cast, width=76, height=30, radius=10).pack(
+            side="left", padx=2
+        )
+
         cast_frame = tk.Frame(self, bd=0, relief="flat")
-        cast_frame.pack(fill="both", expand=True, padx=4, pady=2)
+        cast_frame.pack(fill="both", expand=True, padx=4, pady=(2, 4))
 
         self.cast_tree = ttk.Treeview(
             cast_frame,
@@ -38,23 +47,27 @@ class CastPanel(tk.Frame):
         self.cast_scroll.pack(side="right", fill="y")
         self.cast_tree.bind("<Double-1>", self._inline_edit_cast)
 
-        cast_btns = tk.Frame(self)
-        cast_btns.pack(side="bottom", fill="x", pady=(4, 10), padx=6)
-        RoundedButton(cast_btns, text="+ adicionar", command=self.add_cast, width=82, height=30, radius=10).pack(side="left", padx=2)
-        RoundedButton(cast_btns, text="– remover", command=self.rm_cast, width=76, height=30, radius=10).pack(side="left", padx=2)
-
         self.refresh_cast_tree()
 
-    def refresh_cast_tree(self) -> None:
-        """Atualiza a lista de casting."""
+    def refresh_cast_tree(self, select_idx: int | None = None) -> None:
+        """Atualiza a lista de casting e foca o item selecionado."""
         self.cast_tree.delete(*self.cast_tree.get_children())
-        for name in self.casting:
-            self.cast_tree.insert("", "end", values=(name,))
+        found_id = None
+        for i, name in enumerate(self.casting):
+            item_id = self.cast_tree.insert("", "end", values=(name,))
+            if i == select_idx:
+                found_id = item_id
+
+        if found_id:
+            self.cast_tree.selection_set(found_id)
+            self.cast_tree.focus(found_id)
+            self.cast_tree.see(found_id)
 
     def add_cast(self) -> None:
         """Adiciona um novo nome à lista de casting."""
         self.casting.append("Novo nome")
-        self.refresh_cast_tree()
+        new_idx = len(self.casting) - 1
+        self.refresh_cast_tree(select_idx=new_idx)
         self.on_save()
 
     def rm_cast(self) -> None:
