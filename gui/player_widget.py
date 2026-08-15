@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import os
 import tkinter as tk
-from tkinter import ttk
+from collections.abc import Callable
+from pathlib import Path
+from tkinter import messagebox, ttk
 
 import vlc
 
@@ -21,13 +23,13 @@ class PlayerWidget(tk.Frame):
         master: tk.Widget,
         video_path: str,
         config: dict,
-        on_drag_start: callable,
-        on_drag_end: callable,
+        on_drag_start: Callable[[], None],
+        on_drag_end: Callable[[], None],
     ) -> None:
         """Inicializa o player VLC e monta a interface de controle."""
 
         super().__init__(master)
-        self.config = config
+        self.app_config = config
         self.small_jump = config.get("small_jump", 5)
         self.large_jump = config.get("large_jump", 20)
         self.on_drag_start_cb = on_drag_start
@@ -104,7 +106,7 @@ class PlayerWidget(tk.Frame):
         style.configure("Treeview", borderwidth=0, relief="flat")
 
         def create_vlc_btn(
-            parent: tk.Widget, text: str, command: callable, width: int = 45, height: int = 30
+            parent: tk.Widget, text: str, command: Callable[[], None], width: int = 45, height: int = 30
         ) -> RoundedButton:
             btn = RoundedButton(
                 parent,
@@ -167,6 +169,8 @@ class PlayerWidget(tk.Frame):
         )
         self.volume_scale.set(config.get("volume", 100))
         self.volume_scale.pack(side="left")
+        self.volume_scale.bind("<ButtonRelease-1>", self._save_volume)
+        self.volume_scale.bind("<FocusOut>", self._save_volume)
 
         self.volume_lbl = tk.Label(
             vol_frame, text=f"{self.volume_scale.get()}%", bg=vlc_bg, fg="#333333", font=("Segoe UI", 8, "bold")
@@ -198,7 +202,7 @@ class PlayerWidget(tk.Frame):
 
     def update_config(self, config: dict) -> None:
         """Atualiza tempos de pulo e volume a partir das configurações."""
-        self.config = config
+        self.app_config = config
         self.small_jump = config.get("small_jump", self.small_jump)
         self.large_jump = config.get("large_jump", self.large_jump)
         volume = config.get("volume", self.player.audio_get_volume())
@@ -239,37 +243,39 @@ class PlayerWidget(tk.Frame):
 
     def jump(self, secs: int) -> None:
         """Avança ou retrocede o vídeo em segundos."""
-        cur = self.player.get_time()
-        self.player.set_time(max(0, cur + secs * 1000))
+        current = max(0, self.player.get_time())
+        self._set_bounded_time(current + secs * 1000)
+
+    def _set_bounded_time(self, milliseconds: int) -> None:
+        """Move o vídeo respeitando zero e a duração conhecida da mídia."""
+
+        duration = self.player.get_length()
+        maximum = duration if duration > 0 else milliseconds
+        self.player.set_time(max(0, min(milliseconds, maximum)))
 
     def set_time_seconds(self, sec: int) -> None:
         """Move o vídeo para um segundo específico."""
-        self.player.set_time(sec * 1000)
+        self._set_bounded_time(sec * 1000)
 
     def set_time_ms(self, ms: int) -> None:
         """Move o vídeo para um tempo específico em milissegundos."""
-        self.player.set_time(ms)
+        self._set_bounded_time(ms)
 
     def get_current_time_seconds(self) -> int:
         """Retorna o tempo atual em segundos."""
-        return self.player.get_time() // 1000
+        return max(0, self.player.get_time()) // 1000
 
     def get_current_time_ms(self) -> int:
         """Retorna o tempo atual em milissegundos."""
-        return self.player.get_time()
+        return max(0, self.player.get_time())
 
     def set_subtitle_file(self, srt_path: str) -> None:
         """Carrega e força o recarregamento dinâmico da legenda .srt no VLC em tempo real."""
-        if os.path.exists(srt_path):
-            abs_path = os.path.abspath(srt_path)
-            self.player.video_set_subtitle_file(abs_path)
-            try:
-                import pathlib
-
-                uri = pathlib.Path(abs_path).as_uri()
-                self.player.add_slave(vlc.MediaSlaveType.subtitle, uri, True)
-            except Exception:
-                pass
+        path = Path(srt_path).resolve()
+        if path.exists():
+            result = self.player.add_slave(vlc.MediaSlaveType.subtitle, path.as_uri(), True)
+            if result != 0:
+                raise RuntimeError(f"O VLC não conseguiu carregar a legenda: {path}")
 
     def stop_video(self) -> None:
         """Interrompe a reprodução do vídeo e reseta a barra de tempo."""
@@ -290,7 +296,7 @@ class PlayerWidget(tk.Frame):
         """Ajusta o volume do player, atualiza o ícone e salva na configuração."""
         vol = int(float(val))
         self.player.audio_set_volume(vol)
-        self.config["volume"] = vol
+        self.app_config["volume"] = vol
         self.volume_lbl.config(text=f"{vol}%")
         if hasattr(self, "volume_icon_lbl"):
             if vol == 0:
@@ -299,12 +305,19 @@ class PlayerWidget(tk.Frame):
                 self.volume_icon_lbl.config(text="🔉")
             else:
                 self.volume_icon_lbl.config(text="🔊")
-        save_config(self.config)
+
+    def _save_volume(self, _: tk.Event | None = None) -> None:
+        """Persiste o volume após o usuário concluir o ajuste."""
+
+        try:
+            save_config(self.app_config)
+        except OSError as exc:
+            messagebox.showerror("Volume não salvo", str(exc), parent=self.winfo_toplevel())
 
     def update_ui_loop_step(self) -> None:
         """Atualiza a posição do slider e os rótulos de tempo."""
         dur = self.player.get_length()
-        pos = self.player.get_time()
+        pos = max(0, self.player.get_time())
         if dur > 0:
             self.scale.config(command="")
             self.scale.set(int(pos / dur * 1000))

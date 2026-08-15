@@ -3,7 +3,8 @@ import sys
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
-from config import load_config, save_config
+from config import ConfigLoadError, default_config, load_config, save_config
+from logic import DataLoadError
 
 
 def check_vlc_installed() -> bool:
@@ -16,7 +17,7 @@ def check_vlc_installed() -> bool:
             return False
         instance.release()
         return True
-    except Exception:
+    except (ImportError, OSError, AttributeError):
         return False
 
 
@@ -115,17 +116,34 @@ def main() -> None:
     root = tk.Tk()
     root.title("Editor de Capítulos")
 
-    config = load_config()
+    try:
+        config = load_config()
+    except ConfigLoadError as exc:
+        config = default_config()
+        backup_message = f"\n\nUma cópia foi preservada em:\n{exc.backup_path}" if exc.backup_path else ""
+        messagebox.showwarning(
+            "Configuração restaurada",
+            f"O arquivo de configuração estava ilegível e os valores padrão serão restaurados.{backup_message}",
+        )
+        try:
+            save_config(config)
+        except OSError as save_error:
+            messagebox.showerror("Erro ao salvar configuração", str(save_error))
 
     # Aplica configuração de Sempre no Topo (Always on Top)
     always_on_top_var = tk.BooleanVar(value=config.get("always_on_top", False))
     root.attributes("-topmost", always_on_top_var.get())
 
     def toggle_always_on_top() -> None:
+        """Alterna o modo sempre no topo e persiste a preferência."""
+
         val = always_on_top_var.get()
         root.attributes("-topmost", val)
         config["always_on_top"] = val
-        save_config(config)
+        try:
+            save_config(config)
+        except OSError as exc:
+            messagebox.showerror("Configuração não salva", str(exc))
 
     # Função para centralizar a janela na tela se não houver posição salva
     def center_window(width: int = 1050, height: int = 650) -> None:
@@ -141,7 +159,7 @@ def main() -> None:
     if saved_geom:
         try:
             root.geometry(saved_geom)
-        except Exception:
+        except tk.TclError:
             center_window()
     else:
         center_window()
@@ -181,11 +199,19 @@ def main() -> None:
             )
         if not path:
             return
+        abs_path = os.path.abspath(path)
+        if not os.path.isfile(abs_path):
+            messagebox.showerror("Vídeo não encontrado", f"O arquivo informado não existe:\n{abs_path}")
+            return
+        try:
+            new_editor = ChapterEditor(root, abs_path, config)
+        except (DataLoadError, OSError, ValueError, RuntimeError, tk.TclError) as exc:
+            messagebox.showerror("Não foi possível abrir o vídeo", str(exc))
+            return
         if editor:
             editor.destroy()
-        editor = ChapterEditor(root, path, config)
-        config["last_video"] = path
-        abs_path = os.path.abspath(path)
+        editor = new_editor
+        config["last_video"] = abs_path
         path_var.set(abs_path)
 
     def show_settings() -> None:
@@ -196,13 +222,29 @@ def main() -> None:
         """Exibe a janela modal Sobre."""
         AboutDialog(root)
 
+    def on_closing() -> None:
+        """Salva a configuração e libera o VLC antes de fechar a aplicação."""
+
+        config["window_geometry"] = root.geometry()
+        try:
+            save_config(config)
+        except OSError as exc:
+            if not messagebox.askyesno(
+                "Configuração não salva",
+                f"Não foi possível salvar a configuração:\n{exc}\n\nDeseja fechar mesmo assim?",
+            ):
+                return
+        if editor:
+            editor.destroy()
+        root.destroy()
+
     menubar = tk.Menu(root)
 
     # Menu Arquivo
     file_menu = tk.Menu(menubar, tearoff=0)
     file_menu.add_command(label="Abrir vídeo", command=lambda: open_video())
     file_menu.add_separator()
-    file_menu.add_command(label="Sair", command=root.quit)
+    file_menu.add_command(label="Sair", command=on_closing)
     menubar.add_cascade(label="Arquivo", menu=file_menu)
 
     # Menu Exibir
@@ -235,12 +277,6 @@ def main() -> None:
         open_video(last_video_path)
     else:
         open_video()
-
-    def on_closing() -> None:
-        """Salva a geometria da janela ao fechar a aplicação."""
-        config["window_geometry"] = root.geometry()
-        save_config(config)
-        root.destroy()
 
     root.protocol("WM_DELETE_WINDOW", on_closing)
     root.mainloop()
