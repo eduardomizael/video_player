@@ -47,7 +47,7 @@ class PlayerWidget(tk.Frame):
         top_bar = tk.Frame(controls)
         top_bar.pack(fill="x")
         bottom_bar = tk.Frame(controls)
-        bottom_bar.pack(fill="x")
+        bottom_bar.pack(fill="x", pady=(4, 8))
 
         self.cur_time_lbl = tk.Label(top_bar, text="00:00")
         self.cur_time_lbl.pack(side="left")
