@@ -66,8 +66,13 @@ class ChapterPanel(tk.Frame):
 
         # Menu de contexto (clique direito)
         self.context_menu = tk.Menu(self.tree, tearoff=0)
-        self.context_menu.add_command(label="Definir início na posição atual", command=self._set_start_from_current)
-        self.context_menu.add_command(label="Definir fim na posição atual", command=self._set_end_from_current)
+        self.context_menu.add_command(label="Definir Início", command=self._set_start_from_current)
+        self.context_menu.add_command(label="Definir Fim", command=self._set_end_from_current)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="Adicionar Capítulo", command=self.add_chapter)
+        self.context_menu.add_command(label="Adicionar Subcapítulo", command=self.add_subchapter)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="Remover Capítulo", command=self.rm_chapter)
 
         self.tree.bind("<ButtonRelease-1>", self._on_tree_left_click)
         self.tree.bind("<KeyRelease-Up>", self._jump_to_chapter)
