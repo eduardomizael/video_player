@@ -153,8 +153,8 @@ class ChapterEditor(tk.Frame):
             return handler
 
         p_w = self.player_widget
-        root.bind(keys.get("play_pause", "<space>"), safe_action(p_w.toggle_play_pause))
-        root.bind(keys.get("back_small", "<Left>"), safe_action(lambda: p_w.jump(-p_w.small_jump)))
-        root.bind(keys.get("fwd_small", "<Right>"), safe_action(lambda: p_w.jump(p_w.small_jump)))
-        root.bind(keys.get("back_large", "<Shift-Left>"), safe_action(lambda: p_w.jump(-p_w.large_jump)))
-        root.bind(keys.get("fwd_large", "<Shift-Right>"), safe_action(lambda: p_w.jump(p_w.large_jump)))
+        root.bind(keys.get("play_pause") or "<space>", safe_action(p_w.toggle_play_pause))
+        root.bind(keys.get("back_small") or "<Left>", safe_action(lambda: p_w.jump(-p_w.small_jump)))
+        root.bind(keys.get("fwd_small") or "<Right>", safe_action(lambda: p_w.jump(p_w.small_jump)))
+        root.bind(keys.get("back_large") or "<Shift-Left>", safe_action(lambda: p_w.jump(-p_w.large_jump)))
+        root.bind(keys.get("fwd_large") or "<Shift-Right>", safe_action(lambda: p_w.jump(p_w.large_jump)))

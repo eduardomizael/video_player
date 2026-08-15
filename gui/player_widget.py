@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import tkinter as tk
 from tkinter import ttk
+
 import vlc
 
 from config import save_config
@@ -102,7 +103,9 @@ class PlayerWidget(tk.Frame):
         style.configure("TNotebook", borderwidth=0, highlightthickness=0)
         style.configure("Treeview", borderwidth=0, relief="flat")
 
-        def create_vlc_btn(parent: tk.Widget, text: str, command: callable, width: int = 45, height: int = 30) -> RoundedButton:
+        def create_vlc_btn(
+            parent: tk.Widget, text: str, command: callable, width: int = 45, height: int = 30
+        ) -> RoundedButton:
             btn = RoundedButton(
                 parent,
                 text=text,
@@ -124,10 +127,18 @@ class PlayerWidget(tk.Frame):
 
         tk.Label(bottom_bar, text=" ", bg=vlc_bg, width=1).pack(side="left")
 
-        self.back_large_btn = create_vlc_btn(bottom_bar, f"«{self.large_jump}s", lambda: self.jump(-self.large_jump), width=56, height=30)
-        self.back_small_btn = create_vlc_btn(bottom_bar, f"‹{self.small_jump}s", lambda: self.jump(-self.small_jump), width=52, height=30)
-        self.fwd_small_btn = create_vlc_btn(bottom_bar, f"{self.small_jump}s›", lambda: self.jump(self.small_jump), width=52, height=30)
-        self.fwd_large_btn = create_vlc_btn(bottom_bar, f"{self.large_jump}s»", lambda: self.jump(self.large_jump), width=56, height=30)
+        self.back_large_btn = create_vlc_btn(
+            bottom_bar, f"«{self.large_jump}s", lambda: self.jump(-self.large_jump), width=56, height=30
+        )
+        self.back_small_btn = create_vlc_btn(
+            bottom_bar, f"‹{self.small_jump}s", lambda: self.jump(-self.small_jump), width=52, height=30
+        )
+        self.fwd_small_btn = create_vlc_btn(
+            bottom_bar, f"{self.small_jump}s›", lambda: self.jump(self.small_jump), width=52, height=30
+        )
+        self.fwd_large_btn = create_vlc_btn(
+            bottom_bar, f"{self.large_jump}s»", lambda: self.jump(self.large_jump), width=56, height=30
+        )
 
         tk.Label(bottom_bar, text=" ", bg=vlc_bg, width=1).pack(side="left")
         self.fullscreen_btn = create_vlc_btn(bottom_bar, "⛶", self.toggle_fullscreen, width=36, height=30)
@@ -157,13 +168,26 @@ class PlayerWidget(tk.Frame):
         self.volume_scale.set(config.get("volume", 100))
         self.volume_scale.pack(side="left")
 
-        self.volume_lbl = tk.Label(vol_frame, text=f"{self.volume_scale.get()}%", bg=vlc_bg, fg="#333333", font=("Segoe UI", 8, "bold"))
+        self.volume_lbl = tk.Label(
+            vol_frame, text=f"{self.volume_scale.get()}%", bg=vlc_bg, fg="#333333", font=("Segoe UI", 8, "bold")
+        )
         self.volume_lbl.pack(side="left", padx=(2, 0))
 
         self.scale.bind("<ButtonPress-1>", self._drag_start)
         self.scale.bind("<ButtonRelease-1>", self._drag_end)
+        self.scale.bind("<MouseWheel>", self._on_progress_scroll)
+        self.scale.bind("<Button-4>", self._on_progress_scroll)
+        self.scale.bind("<Button-5>", self._on_progress_scroll)
 
         self.after(100, self._embed_and_play)
+
+    def _on_progress_scroll(self, event: tk.Event) -> str:
+        """Aplica saltos longos ao girar a roda sobre a barra de progresso."""
+        if event.delta > 0 or getattr(event, "num", 0) == 4:
+            self.jump(self.large_jump)
+        elif event.delta < 0 or getattr(event, "num", 0) == 5:
+            self.jump(-self.large_jump)
+        return "break"
 
     def destroy(self) -> None:
         """Libera recursos do player e instância VLC."""
@@ -186,7 +210,7 @@ class PlayerWidget(tk.Frame):
         self.fwd_large_btn.config(text=f"{self.large_jump}s»")
 
     def _embed_player(self) -> None:
-        """Conecta o janela do VLC ao canvas do Tkinter."""
+        """Conecta a janela do VLC ao canvas do Tkinter."""
         wid = self.canvas.winfo_id()
         if os.name == "nt":
             self.player.set_hwnd(wid)
@@ -241,6 +265,7 @@ class PlayerWidget(tk.Frame):
             self.player.video_set_subtitle_file(abs_path)
             try:
                 import pathlib
+
                 uri = pathlib.Path(abs_path).as_uri()
                 self.player.add_slave(vlc.MediaSlaveType.subtitle, uri, True)
             except Exception:
