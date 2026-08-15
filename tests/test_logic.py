@@ -1,6 +1,5 @@
-"""Testes dos tempos e da persistência de capítulos e casting."""
+"""Testes da persistência SQLite ``.chp`` e das regras temporais."""
 
-import json
 from pathlib import Path
 
 import pytest
@@ -49,34 +48,39 @@ def test_parse_flexible_time() -> None:
         parse_flexible_time("0160")
 
 
-def test_chapter_manager_load_save(tmp_path: Path) -> None:
-    """Testa o ciclo completo e a criação de backup da versão anterior."""
+def test_chapter_manager_cria_arquivo_chp_e_preserva_hierarquia(tmp_path: Path) -> None:
+    """Persiste os dados do vídeo no SQLite por vídeo, sem usar JSON."""
 
     manager = ChapterManager(str(tmp_path / "video.mp4"))
     chapters = [{"title": "Capítulo 1", "start": 0, "end": 60, "subs": []}]
-    casting = ["Ator A", "Ator B"]
-    manager.save(chapters, casting)
-    assert manager.load() == {"chapters": chapters, "casting": casting, "metadata": []}
+    casting = [{"name": "Ator A", "images": []}]
+    metadata = [{"key": "autor", "value": "Eduardo", "children": []}]
 
-    manager.save(chapters, ["Ator C"])
-    backup = tmp_path / "video.json.bak"
-    assert json.loads(backup.read_text(encoding="utf-8"))["casting"] == casting
+    manager.save(chapters, casting, metadata)
+
+    assert (tmp_path / "video.chp").exists()
+    loaded = manager.load()
+    assert loaded["chapters"][0]["title"] == "Capítulo 1"
+    assert loaded["casting"][0]["name"] == "Ator A"
+    assert loaded["metadata"][0]["value"] == "Eduardo"
+    assert loaded["images"] == []
+    assert chapters[0]["id"] == loaded["chapters"][0]["id"]
 
 
-def test_chapter_manager_rejeita_json_corrompido_sem_alterar_arquivo(tmp_path: Path) -> None:
-    """Impede que um JSON corrompido seja tratado como dados vazios."""
+def test_chapter_manager_rejeita_arquivo_chp_invalido_sem_alterar(tmp_path: Path) -> None:
+    """Impede que um arquivo binário inválido seja tratado como uma base vazia."""
 
-    json_path = tmp_path / "video.json"
-    original = "JSON INVALIDO {{{"
-    json_path.write_text(original, encoding="utf-8")
+    chp_path = tmp_path / "video.chp"
+    original = b"nao e um sqlite"
+    chp_path.write_bytes(original)
 
     with pytest.raises(DataLoadError):
         ChapterManager(str(tmp_path / "video.mp4")).load()
-    assert json_path.read_text(encoding="utf-8") == original
+    assert chp_path.read_bytes() == original
 
 
-def test_chapter_manager_normaliza_fim_provisorio_e_rejeita_inicio_fora_do_pai(tmp_path: Path) -> None:
-    """Migra fins provisórios, mantendo a regra de início contido pelo pai."""
+def test_chapter_manager_normaliza_fim_e_rejeita_inicio_antes_do_pai(tmp_path: Path) -> None:
+    """Mantém as regras temporais existentes ao gravar no novo formato."""
 
     manager = ChapterManager(str(tmp_path / "video.mp4"))
     manager.save([{"title": "Provisório", "start": 20, "end": 10, "subs": []}], [])
@@ -93,52 +97,58 @@ def test_chapter_manager_normaliza_fim_provisorio_e_rejeita_inicio_fora_do_pai(t
 
 
 def test_chapter_manager_expande_fim_dos_ancestrais(tmp_path: Path) -> None:
-    """Normaliza fins provisórios sem rejeitar filhos que terminam depois do pai."""
+    """Amplia pais até o maior fim de seus descendentes no carregamento."""
 
-    json_path = tmp_path / "video.json"
-    json_path.write_text(
-        json.dumps(
-            {
-                "chapters": [
-                    {
-                        "title": "Pai",
-                        "start": 0,
-                        "end": 10,
-                        "subs": [
-                            {
-                                "title": "Filho",
-                                "start": 5,
-                                "end": 20,
-                                "subs": [{"title": "Neto", "start": 15, "end": 40, "subs": []}],
-                            }
-                        ],
-                    }
-                ],
-                "casting": [],
-            }
-        ),
-        encoding="utf-8",
-    )
-
-    loaded = ChapterManager(str(tmp_path / "video.mp4")).load()
-
-    parent = loaded["chapters"][0]
-    child = parent["subs"][0]
-    assert child["end"] == 40
-    assert parent["end"] == 40
-
-
-def test_chapter_manager_persiste_metadados_hierarquicos(tmp_path: Path) -> None:
-    """Salva metadados no JSON dos capítulos e aceita valores apenas nas folhas."""
-
+    chapters = [
+        {
+            "title": "Pai",
+            "start": 0,
+            "end": 10,
+            "subs": [
+                {
+                    "title": "Filho",
+                    "start": 5,
+                    "end": 20,
+                    "subs": [{"title": "Neto", "start": 15, "end": 40, "subs": []}],
+                }
+            ],
+        }
+    ]
     manager = ChapterManager(str(tmp_path / "video.mp4"))
-    metadata = [{"key": "autor", "value": "", "children": [{"key": "nome", "value": "Eduardo", "children": []}]}]
+    manager.save(chapters, [])
 
-    manager.save([], [], metadata)
+    parent = manager.load()["chapters"][0]
+    assert parent["end"] == 40
+    assert parent["subs"][0]["end"] == 40
 
-    assert manager.load()["metadata"] == metadata
-    saved = json.loads((tmp_path / "video.json").read_text(encoding="utf-8"))
-    assert saved["metadata"] == metadata
+
+def test_chapter_manager_persiste_metadados_e_imagens_reutilizaveis(tmp_path: Path) -> None:
+    """Relaciona uma imagem BLOB ao mesmo tempo a metadado, capítulo e elenco."""
+
+    chapters = [{"title": "Abertura", "start": 0, "end": 10, "subs": []}]
+    casting = [{"name": "Ator A", "images": []}]
+    metadata = [{"key": "autor", "value": "Eduardo", "children": []}]
+    image = {
+        "title": "Retrato",
+        "description": "Imagem recortada.",
+        "data": b"conteudo-jpeg",
+        "mime_type": "image/jpeg",
+        "width": 1080,
+        "height": 1080,
+    }
+    manager = ChapterManager(str(tmp_path / "video.mp4"))
+    manager.save(chapters, casting, metadata, [image])
+    image_id = image["id"]
+    chapters[0]["images"] = [image_id]
+    casting[0]["images"] = [image_id]
+    metadata[0]["images"] = [image_id]
+    manager.save(chapters, casting, metadata, [image])
+
+    loaded = manager.load()
+    assert loaded["images"][0]["data"] == b"conteudo-jpeg"
+    assert loaded["chapters"][0]["images"] == [image_id]
+    assert loaded["casting"][0]["images"] == [image_id]
+    assert loaded["metadata"][0]["images"] == [image_id]
 
 
 def test_chapter_manager_rejeita_valor_em_metadado_com_filhos(tmp_path: Path) -> None:
@@ -146,5 +156,5 @@ def test_chapter_manager_rejeita_valor_em_metadado_com_filhos(tmp_path: Path) ->
 
     metadata = [{"key": "autor", "value": "Eduardo", "children": [{"key": "nome", "value": "", "children": []}]}]
 
-    with pytest.raises(ValueError, match="metadados"):
+    with pytest.raises(ValueError, match="dados"):
         ChapterManager(str(tmp_path / "video.mp4")).save([], [], metadata)

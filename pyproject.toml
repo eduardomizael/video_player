@@ -5,6 +5,7 @@ description = "Editor desktop de capítulos, legendas e elenco para vídeos"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "pillow>=11.0.0",
     "python-vlc>=3.0.21203",
 ]
 

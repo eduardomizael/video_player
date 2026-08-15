@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import json
 import os
 import re
 import shutil
+import sqlite3
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -96,6 +97,35 @@ def parse_flexible_time(txt: str) -> int:
     return hours * 3600 + minutes * 60 + seconds
 
 
+def _new_id() -> str:
+    """Cria um identificador estável para relacionamentos no arquivo ``.chp``."""
+
+    return str(uuid.uuid4())
+
+
+def _normalize_record_id(item: dict[str, Any], location: str) -> str:
+    """Garante que um registro possua um identificador textual não vazio."""
+
+    record_id = item.get("id")
+    if record_id is None:
+        record_id = _new_id()
+        item["id"] = record_id
+    if not isinstance(record_id, str) or not record_id.strip():
+        raise ValueError(f"{location} possui identificador inválido")
+    return record_id
+
+
+def _normalize_image_ids(item: dict[str, Any], location: str) -> list[str]:
+    """Valida as referências de imagens atribuídas a um registro."""
+
+    image_ids = item.setdefault("images", [])
+    if not isinstance(image_ids, list) or any(not isinstance(image_id, str) or not image_id for image_id in image_ids):
+        raise TypeError(f"{location} possui referências de imagens inválidas")
+    if len(image_ids) != len(set(image_ids)):
+        raise ValueError(f"{location} possui imagens repetidas")
+    return image_ids
+
+
 def _validate_chapter(chapter: object, location: str, parent: dict[str, Any] | None = None) -> dict[str, Any]:
     """Valida a hierarquia e amplia o fim dos pais para conter seus descendentes."""
 
@@ -117,7 +147,9 @@ def _validate_chapter(chapter: object, location: str, parent: dict[str, Any] | N
     if not isinstance(subs, list):
         raise TypeError(f"{location} possui subcapítulos inválidos")
 
-    normalized = {"title": title.strip(), "start": start, "end": end, "subs": []}
+    record_id = _normalize_record_id(chapter, location)
+    image_ids = _normalize_image_ids(chapter, location)
+    normalized = {"id": record_id, "title": title.strip(), "start": start, "end": end, "subs": [], "images": image_ids}
     normalized["subs"] = [
         _validate_chapter(sub, f"{location}, subcapítulo {index}", normalized)
         for index, sub in enumerate(subs, start=1)
@@ -149,63 +181,212 @@ def _validate_metadata(items: object, location: str = "metadados") -> list[dict[
             raise ValueError(f"{location} possui chaves repetidas: '{key}'")
         if not isinstance(value, str):
             raise TypeError(f"{item_location} possui valor inválido")
+        record_id = _normalize_record_id(item, item_location)
+        image_ids = _normalize_image_ids(item, item_location)
         normalized_children = _validate_metadata(children, f"{item_location} ({key})")
         if normalized_children and value:
             raise ValueError(f"{item_location} possui filhos e não pode ter valor")
         keys.add(key)
-        normalized.append({"key": key, "value": value, "children": normalized_children})
+        normalized.append(
+            {"id": record_id, "key": key, "value": value, "children": normalized_children, "images": image_ids}
+        )
+    return normalized
+
+
+def _validate_casting(casting: object) -> list[dict[str, Any]]:
+    """Valida os integrantes do elenco e suas imagens associadas."""
+
+    if not isinstance(casting, list):
+        raise TypeError("o campo 'casting' deve ser uma lista")
+    normalized: list[dict[str, Any]] = []
+    for index, member in enumerate(casting, start=1):
+        location = f"casting, item {index}"
+        if isinstance(member, str):
+            member = {"id": _new_id(), "name": member, "images": []}
+            casting[index - 1] = member
+        if not isinstance(member, dict):
+            raise TypeError(f"{location} não é um objeto")
+        name = member.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError(f"{location} possui nome inválido")
+        normalized.append(
+            {
+                "id": _normalize_record_id(member, location),
+                "name": name.strip(),
+                "images": _normalize_image_ids(member, location),
+            }
+        )
+    return normalized
+
+
+def _validate_images(images: object) -> list[dict[str, Any]]:
+    """Valida imagens recortadas mantidas como BLOB no banco SQLite."""
+
+    if not isinstance(images, list):
+        raise TypeError("as imagens devem ser uma lista")
+    normalized: list[dict[str, Any]] = []
+    for index, image in enumerate(images, start=1):
+        location = f"imagem {index}"
+        if not isinstance(image, dict):
+            raise TypeError(f"{location} não é um objeto")
+        title = image.get("title", "")
+        description = image.get("description", "")
+        data = image.get("data")
+        mime_type = image.get("mime_type")
+        width = image.get("width")
+        height = image.get("height")
+        if not isinstance(title, str) or not isinstance(description, str):
+            raise TypeError(f"{location} possui título ou descrição inválidos")
+        if not isinstance(data, bytes) or not data:
+            raise ValueError(f"{location} não possui conteúdo binário")
+        if mime_type not in {"image/jpeg", "image/png"}:
+            raise ValueError(f"{location} possui formato inválido")
+        if isinstance(width, bool) or not isinstance(width, int) or width <= 0:
+            raise ValueError(f"{location} possui largura inválida")
+        if isinstance(height, bool) or not isinstance(height, int) or height <= 0:
+            raise ValueError(f"{location} possui altura inválida")
+        normalized.append(
+            {
+                "id": _normalize_record_id(image, location),
+                "title": title.strip(),
+                "description": description.strip(),
+                "data": data,
+                "mime_type": mime_type,
+                "width": width,
+                "height": height,
+            }
+        )
     return normalized
 
 
 class ChapterManager:
-    """Gerencia carregamento e salvamento de dados de um vídeo."""
+    """Gerencia o arquivo SQLite ``.chp`` associado a um vídeo."""
 
     def __init__(self, video_path: str) -> None:
         """Cria um gerenciador para o arquivo de vídeo indicado."""
 
-        self.json_path = os.path.splitext(video_path)[0] + ".json"
+        self.chp_path = os.path.splitext(video_path)[0] + ".chp"
+
+    @staticmethod
+    def _connect(path: Path) -> sqlite3.Connection:
+        """Abre uma conexão SQLite configurada para preservar integridade referencial."""
+
+        connection = sqlite3.connect(path)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
+        return connection
+
+    @staticmethod
+    def _create_schema(connection: sqlite3.Connection) -> None:
+        """Cria as tabelas estáveis do formato ``.chp`` quando necessário."""
+
+        connection.executescript("""
+            CREATE TABLE IF NOT EXISTS chapters (
+                id TEXT PRIMARY KEY, parent_id TEXT REFERENCES chapters(id) ON DELETE CASCADE,
+                position INTEGER NOT NULL, title TEXT NOT NULL, start INTEGER NOT NULL, end INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS casting (
+                id TEXT PRIMARY KEY, position INTEGER NOT NULL, name TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS metadata (
+                id TEXT PRIMARY KEY, parent_id TEXT REFERENCES metadata(id) ON DELETE CASCADE,
+                position INTEGER NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL DEFAULT '',
+                UNIQUE(parent_id, key)
+            );
+            CREATE TABLE IF NOT EXISTS images (
+                id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', description TEXT NOT NULL DEFAULT '',
+                width INTEGER NOT NULL, height INTEGER NOT NULL, mime_type TEXT NOT NULL, data BLOB NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS image_links (
+                image_id TEXT NOT NULL REFERENCES images(id) ON DELETE CASCADE,
+                record_type TEXT NOT NULL CHECK(record_type IN ('chapters', 'casting', 'metadata')),
+                record_id TEXT NOT NULL, position INTEGER NOT NULL,
+                PRIMARY KEY(image_id, record_type, record_id),
+                UNIQUE(record_type, record_id, position)
+            );
+            """)
+
+    @staticmethod
+    def _image_links(connection: sqlite3.Connection) -> dict[tuple[str, str], list[str]]:
+        """Lê os vínculos de imagens ordenados para cada registro do arquivo."""
+
+        links: dict[tuple[str, str], list[str]] = {}
+        for row in connection.execute("SELECT image_id, record_type, record_id FROM image_links ORDER BY position"):
+            links.setdefault((row["record_type"], row["record_id"]), []).append(row["image_id"])
+        return links
 
     def load(self) -> dict[str, Any]:
-        """Carrega capítulos e casting, rejeitando dados que poderiam ser perdidos."""
+        """Carrega capítulos, elenco, metadados e imagens do arquivo ``.chp``."""
 
-        path = Path(self.json_path)
+        path = Path(self.chp_path)
         if not path.exists():
-            return {"chapters": [], "casting": [], "metadata": []}
+            return {"chapters": [], "casting": [], "metadata": [], "images": []}
         try:
-            with path.open("r", encoding="utf-8") as file_handle:
-                loaded = json.load(file_handle)
-        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            with self._connect(path) as connection:
+                self._create_schema(connection)
+                links = self._image_links(connection)
+                chapter_rows = connection.execute("SELECT * FROM chapters ORDER BY position").fetchall()
+                metadata_rows = connection.execute("SELECT * FROM metadata ORDER BY position").fetchall()
+                casting_rows = connection.execute("SELECT * FROM casting ORDER BY position").fetchall()
+                image_rows = connection.execute("SELECT * FROM images").fetchall()
+        except (OSError, sqlite3.DatabaseError) as exc:
             raise DataLoadError(path, str(exc)) from exc
 
-        if isinstance(loaded, list):
-            chapters = loaded
-            casting: object = []
-            metadata: object = []
-        elif isinstance(loaded, dict):
-            chapters = loaded.get("chapters", [])
-            casting = loaded.get("casting", [])
-            metadata = loaded.get("metadata", [])
-        else:
-            raise DataLoadError(path, "a raiz do JSON deve ser um objeto ou uma lista")
-        if not isinstance(chapters, list):
-            raise DataLoadError(path, "o campo 'chapters' deve ser uma lista")
-        if not isinstance(casting, list) or any(not isinstance(name, str) or not name.strip() for name in casting):
-            raise DataLoadError(path, "o campo 'casting' deve conter apenas nomes válidos")
-        try:
-            validated_chapters = [
-                _validate_chapter(chapter, f"capítulo {index}") for index, chapter in enumerate(chapters, start=1)
-            ]
-            validated_metadata = _validate_metadata(metadata)
-        except (TypeError, ValueError) as exc:
-            raise DataLoadError(path, str(exc)) from exc
+        chapters_by_id = {
+            row["id"]: {
+                "id": row["id"],
+                "title": row["title"],
+                "start": row["start"],
+                "end": row["end"],
+                "subs": [],
+                "images": links.get(("chapters", row["id"]), []),
+            }
+            for row in chapter_rows
+        }
+        chapters = []
+        for row in chapter_rows:
+            node = chapters_by_id[row["id"]]
+            if row["parent_id"]:
+                chapters_by_id[row["parent_id"]]["subs"].append(node)
+            else:
+                chapters.append(node)
+        metadata_by_id = {
+            row["id"]: {
+                "id": row["id"],
+                "key": row["key"],
+                "value": row["value"],
+                "children": [],
+                "images": links.get(("metadata", row["id"]), []),
+            }
+            for row in metadata_rows
+        }
+        metadata = []
+        for row in metadata_rows:
+            node = metadata_by_id[row["id"]]
+            if row["parent_id"]:
+                metadata_by_id[row["parent_id"]]["children"].append(node)
+            else:
+                metadata.append(node)
+        casting = [
+            {"id": row["id"], "name": row["name"], "images": links.get(("casting", row["id"]), [])}
+            for row in casting_rows
+        ]
+        images = [dict(row) for row in image_rows]
         return {
-            "chapters": validated_chapters,
-            "casting": [name.strip() for name in casting],
-            "metadata": validated_metadata,
+            "chapters": chapters,
+            "casting": casting,
+            "metadata": metadata,
+            "images": images,
         }
 
-    def save(self, chapters: list[dict], casting: list[str], metadata: list[dict] | None = None) -> None:
-        """Valida e grava capítulos, casting e metadados de forma atômica."""
+    def save(
+        self,
+        chapters: list[dict],
+        casting: list[dict],
+        metadata: list[dict] | None = None,
+        images: list[dict] | None = None,
+    ) -> None:
+        """Valida e grava todos os dados em uma única transação SQLite."""
 
         try:
             validated = [
@@ -213,22 +394,71 @@ class ChapterManager:
             ]
         except (TypeError, ValueError) as exc:
             raise ValueError(f"Os capítulos não foram salvos: {exc}") from exc
-        if any(not isinstance(name, str) or not name.strip() for name in casting):
-            raise ValueError("O casting não foi salvo porque contém um nome inválido")
         try:
             validated_metadata = _validate_metadata([] if metadata is None else metadata)
+            validated_casting = _validate_casting(casting)
+            validated_images = _validate_images([] if images is None else images)
         except (TypeError, ValueError) as exc:
-            raise ValueError(f"Os metadados não foram salvos: {exc}") from exc
-        content = json.dumps(
-            {
-                "chapters": validated,
-                "casting": [name.strip() for name in casting],
-                "metadata": validated_metadata,
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
-        _atomic_write_text(Path(self.json_path), f"{content}\n")
+            raise ValueError(f"Os dados não foram salvos: {exc}") from exc
+        image_ids = {image["id"] for image in validated_images}
+
+        def insert_links(connection: sqlite3.Connection, record_type: str, record: dict) -> None:
+            for position, image_id in enumerate(record["images"]):
+                if image_id not in image_ids:
+                    raise ValueError(f"A imagem vinculada ao registro '{record['id']}' não existe")
+                connection.execute(
+                    "INSERT INTO image_links VALUES (?, ?, ?, ?)", (image_id, record_type, record["id"], position)
+                )
+
+        def insert_chapters(connection: sqlite3.Connection, nodes: list[dict], parent_id: str | None = None) -> None:
+            for position, node in enumerate(nodes):
+                connection.execute(
+                    "INSERT INTO chapters VALUES (?, ?, ?, ?, ?, ?)",
+                    (node["id"], parent_id, position, node["title"], node["start"], node["end"]),
+                )
+                insert_links(connection, "chapters", node)
+                insert_chapters(connection, node["subs"], node["id"])
+
+        def insert_metadata(connection: sqlite3.Connection, nodes: list[dict], parent_id: str | None = None) -> None:
+            for position, node in enumerate(nodes):
+                connection.execute(
+                    "INSERT INTO metadata VALUES (?, ?, ?, ?, ?)",
+                    (node["id"], parent_id, position, node["key"], node["value"]),
+                )
+                insert_links(connection, "metadata", node)
+                insert_metadata(connection, node["children"], node["id"])
+
+        path = Path(self.chp_path)
+        try:
+            with self._connect(path) as connection:
+                self._create_schema(connection)
+                connection.execute("DELETE FROM image_links")
+                connection.execute("DELETE FROM chapters")
+                connection.execute("DELETE FROM casting")
+                connection.execute("DELETE FROM metadata")
+                connection.execute("DELETE FROM images")
+                connection.executemany(
+                    "INSERT INTO images VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    [
+                        (
+                            image["id"],
+                            image["title"],
+                            image["description"],
+                            image["width"],
+                            image["height"],
+                            image["mime_type"],
+                            image["data"],
+                        )
+                        for image in validated_images
+                    ],
+                )
+                insert_chapters(connection, validated)
+                for position, member in enumerate(validated_casting):
+                    connection.execute("INSERT INTO casting VALUES (?, ?, ?)", (member["id"], position, member["name"]))
+                    insert_links(connection, "casting", member)
+                insert_metadata(connection, validated_metadata)
+        except (OSError, sqlite3.DatabaseError) as exc:
+            raise ValueError(f"Os dados não foram salvos: {exc}") from exc
 
 
 def fmt_srt_time(ms: int) -> str:
