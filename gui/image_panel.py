@@ -5,8 +5,9 @@ from __future__ import annotations
 import tkinter as tk
 import uuid
 from collections.abc import Callable
-from tkinter import messagebox, ttk
+from tkinter import ttk
 
+from gui.confirmation_dialog import ask_confirmation
 from gui.image_cropper import ImageCropper
 from gui.rounded_button import RoundedButton
 
@@ -28,7 +29,6 @@ class ImagePanel(tk.Frame):
         self.get_records = get_records
         self.on_save = on_save
         self.item_map: dict[str, dict] = {}
-        self.record_map: dict[str, tuple[str, dict]] = {}
 
         buttons = tk.Frame(self)
         buttons.pack(fill="x", padx=6, pady=(6, 4))
@@ -54,14 +54,6 @@ class ImagePanel(tk.Frame):
         scrollbar.pack(side="right", fill="y")
         self.tree.bind("<<TreeviewSelect>>", lambda _: self._update_details())
 
-        details = ttk.LabelFrame(self, text="Associar imagem selecionada")
-        details.pack(fill="x", padx=6, pady=6)
-        self.target_var = tk.StringVar()
-        self.target = ttk.Combobox(details, textvariable=self.target_var, state="readonly")
-        self.target.pack(side="left", fill="x", expand=True, padx=6, pady=6)
-        tk.Button(details, text="Associar", command=self.attach).pack(side="left", padx=(0, 3), pady=6)
-        tk.Button(details, text="Desassociar", command=self.detach).pack(side="left", padx=(0, 6), pady=6)
-
         self.description_var = tk.StringVar(value="Selecione uma imagem para ver sua descrição.")
         tk.Label(self, textvariable=self.description_var, anchor="w", justify="left", wraplength=270).pack(
             fill="x", padx=8, pady=(0, 6)
@@ -69,7 +61,7 @@ class ImagePanel(tk.Frame):
         self.refresh()
 
     def refresh(self, selected: dict | None = None) -> None:
-        """Atualiza imagens e destinos que podem receber associações."""
+        """Atualiza a biblioteca visual de imagens."""
 
         self.tree.delete(*self.tree.get_children())
         self.item_map = {}
@@ -84,16 +76,6 @@ class ImagePanel(tk.Frame):
             self.item_map[item_id] = image
             if image is selected:
                 selected_id = item_id
-        self.record_map = {}
-        labels = []
-        for record_type, record, label in self.get_records():
-            if not record.get("id"):
-                continue
-            self.record_map[label] = (record_type, record)
-            labels.append(label)
-        self.target["values"] = labels
-        if self.target_var.get() not in self.record_map:
-            self.target_var.set(labels[0] if labels else "")
         if selected_id:
             self.tree.selection_set(selected_id)
             self.tree.focus(selected_id)
@@ -118,38 +100,11 @@ class ImagePanel(tk.Frame):
         selection = self.tree.selection()
         return self.item_map.get(selection[0]) if selection else None
 
-    def attach(self) -> None:
-        """Relaciona a imagem selecionada ao capítulo, elenco ou metadado escolhido."""
-
-        image = self._selected_image()
-        target = self.record_map.get(self.target_var.get())
-        if image is None or target is None:
-            return
-        _, record = target
-        record.setdefault("images", [])
-        if image["id"] not in record["images"]:
-            record["images"].append(image["id"])
-            self.on_save()
-        self._update_details()
-
-    def detach(self) -> None:
-        """Remove apenas o vínculo entre a imagem e o registro selecionado."""
-
-        image = self._selected_image()
-        target = self.record_map.get(self.target_var.get())
-        if image is None or target is None:
-            return
-        _, record = target
-        if image["id"] in record.get("images", []):
-            record["images"].remove(image["id"])
-            self.on_save()
-        self._update_details()
-
     def remove_image(self) -> None:
         """Exclui a imagem selecionada e todos os seus vínculos."""
 
         image = self._selected_image()
-        if image is None or not messagebox.askyesno("Remover imagem", "Excluir a imagem e todas as associações?"):
+        if image is None or not ask_confirmation(self, "Remover imagem", "Excluir a imagem e todas as associações?"):
             return
         for _, record, _ in self.get_records():
             if image["id"] in record.get("images", []):
@@ -159,13 +114,10 @@ class ImagePanel(tk.Frame):
         self.refresh()
 
     def _update_details(self) -> None:
-        """Exibe descrição e estado do vínculo para a seleção atual."""
+        """Exibe a descrição da imagem selecionada."""
 
         image = self._selected_image()
         if image is None:
             self.description_var.set("Selecione uma imagem para ver sua descrição.")
             return
-        target = self.record_map.get(self.target_var.get())
-        linked = bool(target and image["id"] in target[1].get("images", []))
-        status = "Associada ao destino selecionado." if linked else "Não associada ao destino selecionado."
-        self.description_var.set(f"{image['description'] or 'Sem descrição.'}\n{status}")
+        self.description_var.set(image["description"] or "Sem descrição.")

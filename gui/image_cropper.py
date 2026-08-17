@@ -72,6 +72,16 @@ class ImageCropper(tk.Toplevel):
         self.bind("<Control-v>", lambda _: self.paste_image())
         self.grab_set()
         self._draw()
+        self._center_over_parent()
+
+    def _center_over_parent(self) -> None:
+        """Centraliza o recortador dentro da janela principal da aplicação."""
+
+        self.update_idletasks()
+        parent = self.master.winfo_toplevel()
+        x = parent.winfo_x() + (parent.winfo_width() - self.winfo_width()) // 2
+        y = parent.winfo_y() + (parent.winfo_height() - self.winfo_height()) // 2
+        self.geometry(f"{self.winfo_width()}x{self.winfo_height()}+{max(0, x)}+{max(0, y)}")
 
     def open_image(self) -> None:
         """Abre uma imagem escolhida pelo usuário."""

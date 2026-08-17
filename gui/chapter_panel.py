@@ -6,6 +6,8 @@ import tkinter as tk
 from collections.abc import Callable
 from tkinter import messagebox, ttk
 
+from gui.add_item_dialog import AddItemDialog, FormField
+from gui.confirmation_dialog import ask_confirmation
 from gui.rounded_button import RoundedButton
 from logic import fmt_sec, parse_flexible_time
 
@@ -20,6 +22,7 @@ class ChapterPanel(tk.Frame):
         on_save: Callable[[], None],
         get_current_time: Callable[[], int],
         on_jump_to_sec: Callable[[int], None],
+        on_manage_images: Callable[[dict], None],
     ) -> None:
         """Inicializa o painel de capítulos."""
 
@@ -28,6 +31,7 @@ class ChapterPanel(tk.Frame):
         self.on_save = on_save
         self.get_current_time = get_current_time
         self.on_jump_to_sec = on_jump_to_sec
+        self.on_manage_images = on_manage_images
         self.item_map: dict[str, dict] = {}
 
         btns = tk.Frame(self)
@@ -71,6 +75,7 @@ class ChapterPanel(tk.Frame):
         self.context_menu.add_separator()
         self.context_menu.add_command(label="Adicionar Capítulo", command=self.add_chapter)
         self.context_menu.add_command(label="Adicionar Subcapítulo", command=self.add_subchapter)
+        self.context_menu.add_command(label="Associar imagens...", command=self._manage_images)
         self.context_menu.add_separator()
         self.context_menu.add_command(label="Remover Capítulo", command=self.rm_chapter)
 
@@ -157,7 +162,7 @@ class ChapterPanel(tk.Frame):
         return True
 
     def add_chapter(self) -> None:
-        """Cria um irmão do item selecionado ou um capítulo raiz sem seleção."""
+        """Abre o formulário para criar um irmão ou capítulo raiz."""
 
         selection = self.tree.selection()
         parent_id = self.tree.parent(selection[0]) if selection else ""
@@ -170,18 +175,42 @@ class ChapterPanel(tk.Frame):
             )
             return
         title_prefix = "Sub" if parent else "Capítulo"
-        title = f"{title_prefix} {len(siblings) + 1}"
-        end_sec = cur_sec + 10
-        new_chap = {"title": title, "start": cur_sec, "end": end_sec, "subs": []}
-        siblings.append(new_chap)
-        if parent_id:
-            self._expand_parent_ends(parent_id, end_sec)
-        self._sort_chapters()
-        self.refresh_chap_tree(select_chap=new_chap)
-        self.on_save()
+
+        def submit(values: dict[str, str]) -> str | None:
+            title = values["title"].strip()
+            try:
+                start = parse_flexible_time(values["start"])
+                end = parse_flexible_time(values["end"])
+            except ValueError:
+                return "Use hh:mm:ss, mm:ss ou apenas segundos para os tempos."
+            if not title:
+                return "O título não pode ficar vazio."
+            if end < start:
+                return "O fim do capítulo não pode ser anterior ao início."
+            if parent and start < parent["start"]:
+                return "O capítulo não pode começar antes do capítulo pai."
+            new_chap = {"title": title, "start": start, "end": end, "subs": []}
+            siblings.append(new_chap)
+            if parent_id:
+                self._expand_parent_ends(parent_id, end)
+            self._sort_chapters()
+            self.refresh_chap_tree(select_chap=new_chap)
+            self.on_save()
+            return None
+
+        AddItemDialog(
+            self,
+            "Adicionar capítulo",
+            [
+                FormField("title", "Título", f"{title_prefix} {len(siblings) + 1}"),
+                FormField("start", "Início", fmt_sec(cur_sec)),
+                FormField("end", "Fim", fmt_sec(cur_sec + 10)),
+            ],
+            submit,
+        )
 
     def add_subchapter(self) -> None:
-        """Adiciona um subcapítulo ao item selecionado."""
+        """Abre o formulário para adicionar um subcapítulo ao item selecionado."""
         sel = self.tree.selection()
         if not sel:
             return
@@ -191,7 +220,6 @@ class ChapterPanel(tk.Frame):
             return
         parent = target
         subs = parent.setdefault("subs", [])
-        title = f"Sub {len(subs) + 1}"
         cur_sec = self.get_current_time()
         if cur_sec < parent["start"]:
             messagebox.showerror(
@@ -199,12 +227,38 @@ class ChapterPanel(tk.Frame):
             )
             return
         end_sec = max(parent["end"], cur_sec + 10)
-        new_sub = {"title": title, "start": cur_sec, "end": end_sec, "subs": []}
-        subs.append(new_sub)
-        self._expand_parent_ends(item, end_sec)
-        self._sort_chapters()
-        self.refresh_chap_tree(select_chap=new_sub)
-        self.on_save()
+
+        def submit(values: dict[str, str]) -> str | None:
+            title = values["title"].strip()
+            try:
+                start = parse_flexible_time(values["start"])
+                end = parse_flexible_time(values["end"])
+            except ValueError:
+                return "Use hh:mm:ss, mm:ss ou apenas segundos para os tempos."
+            if not title:
+                return "O título não pode ficar vazio."
+            if end < start:
+                return "O fim do subcapítulo não pode ser anterior ao início."
+            if start < parent["start"]:
+                return "O subcapítulo não pode começar antes do capítulo pai."
+            new_sub = {"title": title, "start": start, "end": end, "subs": []}
+            subs.append(new_sub)
+            self._expand_parent_ends(item, end)
+            self._sort_chapters()
+            self.refresh_chap_tree(select_chap=new_sub)
+            self.on_save()
+            return None
+
+        AddItemDialog(
+            self,
+            "Adicionar subcapítulo",
+            [
+                FormField("title", "Título", f"Sub {len(subs) + 1}"),
+                FormField("start", "Início", fmt_sec(cur_sec)),
+                FormField("end", "Fim", fmt_sec(end_sec)),
+            ],
+            submit,
+        )
 
     def rm_chapter(self) -> None:
         """Remove o capítulo selecionado após confirmação."""
@@ -218,12 +272,12 @@ class ChapterPanel(tk.Frame):
         parent_id = self.tree.parent(item)
         removed = False
         if not parent_id:
-            if messagebox.askyesno("Remover", f"Excluir '{node['title']}'?"):
+            if ask_confirmation(self, "Remover", f"Excluir '{node['title']}'?"):
                 self.chaps.remove(node)
                 removed = True
         else:
             parent_node = self.item_map.get(parent_id)
-            if parent_node and messagebox.askyesno("Remover", f"Excluir '{node['title']}'?"):
+            if parent_node and ask_confirmation(self, "Remover", f"Excluir '{node['title']}'?"):
                 parent_node.get("subs", []).remove(node)
                 removed = True
         if removed:
@@ -254,6 +308,13 @@ class ChapterPanel(tk.Frame):
             return
         self.tree.selection_set(row_id)
         self.context_menu.tk_popup(event.x_root, event.y_root)
+
+    def _manage_images(self) -> None:
+        """Abre a seleção de imagens para o capítulo atualmente selecionado."""
+
+        selection = self.tree.selection()
+        if selection and (node := self.item_map.get(selection[0])):
+            self.on_manage_images(node)
 
     def _set_start_from_current(self) -> None:
         """Define o tempo de início do capítulo selecionado para a posição atual do vídeo."""

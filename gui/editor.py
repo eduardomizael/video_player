@@ -8,6 +8,7 @@ from tkinter import messagebox, ttk
 
 from gui.cast_panel import CastPanel
 from gui.chapter_panel import ChapterPanel
+from gui.image_association_dialog import ImageAssociationDialog
 from gui.image_panel import ImagePanel
 from gui.metadata_panel import MetadataPanel
 from gui.player_widget import PlayerWidget
@@ -67,6 +68,7 @@ class ChapterEditor(tk.Frame):
             on_save=self.save_data,
             get_current_time=self.player_widget.get_current_time_seconds,
             on_jump_to_sec=self.player_widget.set_time_seconds,
+            on_manage_images=self.open_image_associations,
         )
         self.chap_panel.pack(fill="both", expand=True)
 
@@ -89,12 +91,18 @@ class ChapterEditor(tk.Frame):
             cast_tab,
             casting=self.casting,
             on_save=self.save_data,
+            on_manage_images=self.open_image_associations,
         )
         self.cast_panel.pack(fill="both", expand=True)
 
         metadata_tab = tk.Frame(self.notebook)
         self.notebook.add(metadata_tab, text="Metadados")
-        self.metadata_panel = MetadataPanel(metadata_tab, metadata=self.metadata, on_save=self.save_data)
+        self.metadata_panel = MetadataPanel(
+            metadata_tab,
+            metadata=self.metadata,
+            on_save=self.save_data,
+            on_manage_images=self.open_image_associations,
+        )
         self.metadata_panel.pack(fill="both", expand=True)
 
         images_tab = tk.Frame(self.notebook)
@@ -174,6 +182,11 @@ class ChapterEditor(tk.Frame):
         add_metadata(self.metadata)
         records.extend(("casting", member, f"Elenco: {member['name']}") for member in self.casting)
         return records
+
+    def open_image_associations(self, record: dict) -> None:
+        """Abre o diálogo que associa várias imagens ao registro selecionado."""
+
+        ImageAssociationDialog(self, self.images, record, self.save_data)
 
     def update_config(self, config: dict) -> None:
         """Aplica as configurações atualizadas aos submódulos."""

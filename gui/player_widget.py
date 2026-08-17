@@ -183,7 +183,7 @@ class PlayerWidget(tk.Frame):
         self.scale.bind("<Button-4>", self._on_progress_scroll)
         self.scale.bind("<Button-5>", self._on_progress_scroll)
 
-        self.after(100, self._embed_and_play)
+        self.embed_after: str | None = self.after(100, self._embed_and_play)
 
     def _on_progress_scroll(self, event: tk.Event) -> str:
         """Aplica saltos longos ao girar a roda sobre a barra de progresso."""
@@ -195,10 +195,18 @@ class PlayerWidget(tk.Frame):
 
     def destroy(self) -> None:
         """Libera recursos do player e instância VLC."""
+        self._cancel_embed_schedule()
         self.player.stop()
         self.player.release()
         self.vlc.release()
         super().destroy()
+
+    def _cancel_embed_schedule(self) -> None:
+        """Cancela a incorporação pendente do VLC antes de destruir o canvas."""
+
+        if self.embed_after:
+            self.after_cancel(self.embed_after)
+            self.embed_after = None
 
     def update_config(self, config: dict) -> None:
         """Atualiza tempos de pulo e volume a partir das configurações."""
@@ -223,6 +231,7 @@ class PlayerWidget(tk.Frame):
 
     def _embed_and_play(self) -> None:
         """Conecta a janela do VLC e inicia a reprodução."""
+        self.embed_after = None
         self._embed_player()
         self.toggle_play_pause()
 

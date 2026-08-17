@@ -6,6 +6,8 @@ import tkinter as tk
 from collections.abc import Callable
 from tkinter import messagebox, ttk
 
+from gui.add_item_dialog import AddItemDialog, FormField
+from gui.confirmation_dialog import ask_confirmation
 from gui.rounded_button import RoundedButton
 from logic import fmt_srt_time, parse_srt_time
 
@@ -111,15 +113,35 @@ class SubtitlePanel(tk.Frame):
         return True
 
     def add_subtitle(self) -> None:
-        """Cria uma nova entrada de legenda na posição atual de reprodução."""
+        """Abre o formulário para criar uma legenda na posição atual de reprodução."""
         cur_ms = self.get_current_time_ms()
         end_ms = cur_ms + 3000
-        text = f"Legenda {len(self.subtitles) + 1}"
-        new_sub = {"start": cur_ms, "end": end_ms, "text": text}
-        self.subtitles.append(new_sub)
-        self.subtitles.sort(key=lambda x: x["start"])
-        self.refresh_sub_tree(select_sub=new_sub)
-        self.on_save()
+
+        def submit(values: dict[str, str]) -> str | None:
+            try:
+                start = parse_srt_time(values["start"])
+                end = parse_srt_time(values["end"])
+            except ValueError:
+                return "Use hh:mm:ss,mmm ou mm:ss,mmm para os tempos."
+            if end < start:
+                return "O fim da legenda não pode ser anterior ao início."
+            new_sub = {"start": start, "end": end, "text": values["text"].strip()}
+            self.subtitles.append(new_sub)
+            self.subtitles.sort(key=lambda item: item["start"])
+            self.refresh_sub_tree(select_sub=new_sub)
+            self.on_save()
+            return None
+
+        AddItemDialog(
+            self,
+            "Adicionar legenda",
+            [
+                FormField("start", "Início", fmt_srt_time(cur_ms)),
+                FormField("end", "Fim", fmt_srt_time(end_ms)),
+                FormField("text", "Texto", f"Legenda {len(self.subtitles) + 1}", multiline=True),
+            ],
+            submit,
+        )
 
     def rm_subtitle(self) -> None:
         """Remove a legenda selecionada após confirmação."""
@@ -130,7 +152,7 @@ class SubtitlePanel(tk.Frame):
         node = self.item_map.get(item)
         if node is None:
             return
-        if messagebox.askyesno("Remover Legenda", f"Excluir legenda '{node.get('text', '')}'?"):
+        if ask_confirmation(self, "Remover Legenda", f"Excluir legenda '{node.get('text', '')}'?"):
             self.subtitles.remove(node)
             self.refresh_sub_tree()
             self.on_save()

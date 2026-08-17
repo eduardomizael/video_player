@@ -1,10 +1,26 @@
 import os
 import sys
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import filedialog, messagebox
 
 from config import ConfigLoadError, default_config, load_config, save_config
 from logic import DataLoadError
+
+
+def replace_editor(
+    root: tk.Tk,
+    current_editor: tk.Widget | None,
+    video_path: str,
+    config: dict,
+    editor_factory: Callable[[tk.Tk, str, dict], tk.Widget],
+) -> tk.Widget:
+    """Libera o editor anterior antes de criar outro para o vídeo solicitado."""
+
+    if current_editor:
+        current_editor.destroy()
+        root.update_idletasks()
+    return editor_factory(root, video_path, config)
 
 
 def check_vlc_installed() -> bool:
@@ -204,12 +220,11 @@ def main() -> None:
             messagebox.showerror("Vídeo não encontrado", f"O arquivo informado não existe:\n{abs_path}")
             return
         try:
-            new_editor = ChapterEditor(root, abs_path, config)
+            new_editor = replace_editor(root, editor, abs_path, config, ChapterEditor)
         except (DataLoadError, OSError, ValueError, RuntimeError, tk.TclError) as exc:
-            messagebox.showerror("Não foi possível abrir o vídeo", str(exc))
+            editor = None
+            messagebox.showerror("Não foi possível abrir o vídeo", str(exc), parent=root)
             return
-        if editor:
-            editor.destroy()
         editor = new_editor
         config["last_video"] = abs_path
         path_var.set(abs_path)

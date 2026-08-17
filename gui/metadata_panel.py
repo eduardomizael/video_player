@@ -6,18 +6,27 @@ import tkinter as tk
 from collections.abc import Callable
 from tkinter import messagebox, ttk
 
+from gui.add_item_dialog import AddItemDialog, FormField
+from gui.confirmation_dialog import ask_confirmation
 from gui.rounded_button import RoundedButton
 
 
 class MetadataPanel(tk.Frame):
     """Edita chaves e valores hierárquicos, mantendo valores apenas nas folhas."""
 
-    def __init__(self, master: tk.Widget, metadata: list[dict], on_save: Callable[[], None]) -> None:
+    def __init__(
+        self,
+        master: tk.Widget,
+        metadata: list[dict],
+        on_save: Callable[[], None],
+        on_manage_images: Callable[[dict], None],
+    ) -> None:
         """Inicializa a árvore visual de metadados."""
 
         super().__init__(master)
         self.metadata = metadata
         self.on_save = on_save
+        self.on_manage_images = on_manage_images
         self.item_map: dict[str, dict] = {}
 
         buttons = tk.Frame(self)
@@ -45,6 +54,10 @@ class MetadataPanel(tk.Frame):
         scrollbar.pack(side="right", fill="y")
 
         self.tree.bind("<Double-1>", self._inline_edit)
+        self.context_menu = tk.Menu(self.tree, tearoff=0)
+        self.context_menu.add_command(label="Associar imagens...", command=self._manage_images)
+        self.tree.bind("<Button-3>", self._show_context_menu)
+        self.tree.bind("<Button-2>", self._show_context_menu)
         self.refresh_tree()
 
     def refresh_tree(self, selected: dict | None = None) -> None:
@@ -71,19 +84,34 @@ class MetadataPanel(tk.Frame):
             self.tree.see(selected_id)
 
     def add_item(self) -> None:
-        """Adiciona uma chave no mesmo nível do item selecionado."""
+        """Abre o formulário para adicionar uma chave no mesmo nível do item selecionado."""
 
         selection = self.tree.selection()
         parent_id = self.tree.parent(selection[0]) if selection else ""
         parent = self.item_map.get(parent_id)
         siblings = parent["children"] if parent else self.metadata
-        node = {"key": self._next_key(siblings), "value": "", "children": []}
-        siblings.append(node)
-        self.refresh_tree(node)
-        self.on_save()
+
+        def submit(values: dict[str, str]) -> str | None:
+            key = values["key"].strip()
+            if not key:
+                return "A chave não pode ficar vazia."
+            if any(node["key"] == key for node in siblings):
+                return "Não pode haver chaves repetidas no mesmo nível."
+            node = {"key": key, "value": values["value"].strip(), "children": []}
+            siblings.append(node)
+            self.refresh_tree(node)
+            self.on_save()
+            return None
+
+        AddItemDialog(
+            self,
+            "Adicionar metadado",
+            [FormField("key", "Chave", self._next_key(siblings)), FormField("value", "Valor", "")],
+            submit,
+        )
 
     def add_child(self) -> None:
-        """Adiciona filho e transfere para ele o valor que havia no pai."""
+        """Abre o formulário para criar filho e transferir o valor do pai."""
 
         selection = self.tree.selection()
         if not selection:
@@ -91,12 +119,30 @@ class MetadataPanel(tk.Frame):
         parent = self.item_map.get(selection[0])
         if parent is None:
             return
-        value = parent["value"]
-        parent["value"] = ""
-        child = {"key": self._next_key(parent["children"]), "value": value, "children": []}
-        parent["children"].append(child)
-        self.refresh_tree(child)
-        self.on_save()
+        siblings = parent["children"]
+
+        def submit(values: dict[str, str]) -> str | None:
+            key = values["key"].strip()
+            if not key:
+                return "A chave não pode ficar vazia."
+            if any(node["key"] == key for node in siblings):
+                return "Não pode haver chaves repetidas no mesmo nível."
+            parent["value"] = ""
+            child = {"key": key, "value": values["value"].strip(), "children": []}
+            siblings.append(child)
+            self.refresh_tree(child)
+            self.on_save()
+            return None
+
+        AddItemDialog(
+            self,
+            "Adicionar metadado filho",
+            [
+                FormField("key", "Chave", self._next_key(siblings)),
+                FormField("value", "Valor", parent["value"]),
+            ],
+            submit,
+        )
 
     def remove_item(self) -> None:
         """Remove o item selecionado e seus descendentes após confirmação."""
@@ -106,7 +152,7 @@ class MetadataPanel(tk.Frame):
             return
         item_id = selection[0]
         node = self.item_map.get(item_id)
-        if node is None or not messagebox.askyesno("Remover", f"Excluir '{node['key']}' e seus filhos?"):
+        if node is None or not ask_confirmation(self, "Remover", f"Excluir '{node['key']}' e seus filhos?"):
             return
         parent_id = self.tree.parent(item_id)
         parent = self.item_map.get(parent_id)
@@ -170,3 +216,19 @@ class MetadataPanel(tk.Frame):
         entry.bind("<Return>", commit)
         entry.bind("<Escape>", lambda *_: entry.destroy())
         entry.bind("<FocusOut>", lambda *_: entry.destroy())
+
+    def _show_context_menu(self, event: tk.Event) -> None:
+        """Exibe as ações disponíveis para o metadado clicado."""
+
+        item_id = self.tree.identify_row(event.y)
+        if not item_id:
+            return
+        self.tree.selection_set(item_id)
+        self.context_menu.tk_popup(event.x_root, event.y_root)
+
+    def _manage_images(self) -> None:
+        """Abre a seleção de imagens para o metadado selecionado."""
+
+        selection = self.tree.selection()
+        if selection and (node := self.item_map.get(selection[0])):
+            self.on_manage_images(node)

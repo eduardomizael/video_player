@@ -4,20 +4,29 @@ from __future__ import annotations
 
 import tkinter as tk
 from collections.abc import Callable
-from tkinter import messagebox, ttk
+from tkinter import ttk
 
+from gui.add_item_dialog import AddItemDialog, FormField
+from gui.confirmation_dialog import ask_confirmation
 from gui.rounded_button import RoundedButton
 
 
 class CastPanel(tk.Frame):
     """Painel de elenco (casting) com Treeview, Scrollbar e edição inline."""
 
-    def __init__(self, master: tk.Widget, casting: list[dict], on_save: Callable[[], None]) -> None:
+    def __init__(
+        self,
+        master: tk.Widget,
+        casting: list[dict],
+        on_save: Callable[[], None],
+        on_manage_images: Callable[[dict], None],
+    ) -> None:
         """Inicializa o painel de casting."""
 
         super().__init__(master)
         self.casting = casting
         self.on_save = on_save
+        self.on_manage_images = on_manage_images
 
         cast_btns = tk.Frame(self)
         cast_btns.pack(side="top", fill="x", pady=(6, 4), padx=6)
@@ -46,6 +55,10 @@ class CastPanel(tk.Frame):
         self.cast_tree.pack(side="left", fill="both", expand=True)
         self.cast_scroll.pack(side="right", fill="y")
         self.cast_tree.bind("<Double-1>", self._inline_edit_cast)
+        self.context_menu = tk.Menu(self.cast_tree, tearoff=0)
+        self.context_menu.add_command(label="Associar imagens...", command=self._manage_images)
+        self.cast_tree.bind("<Button-3>", self._show_context_menu)
+        self.cast_tree.bind("<Button-2>", self._show_context_menu)
 
         self.refresh_cast_tree()
 
@@ -64,11 +77,18 @@ class CastPanel(tk.Frame):
             self.cast_tree.see(found_id)
 
     def add_cast(self) -> None:
-        """Adiciona um novo nome à lista de casting."""
-        self.casting.append({"name": "Novo nome", "images": []})
-        new_idx = len(self.casting) - 1
-        self.refresh_cast_tree(select_idx=new_idx)
-        self.on_save()
+        """Abre o formulário para definir o nome do novo integrante."""
+
+        def submit(values: dict[str, str]) -> str | None:
+            name = values["name"].strip()
+            if not name:
+                return "O nome não pode ficar vazio."
+            self.casting.append({"name": name, "images": []})
+            self.refresh_cast_tree(select_idx=len(self.casting) - 1)
+            self.on_save()
+            return None
+
+        AddItemDialog(self, "Adicionar integrante", [FormField("name", "Nome", "Novo nome")], submit)
 
     def rm_cast(self) -> None:
         """Remove o nome selecionado após confirmação."""
@@ -76,7 +96,7 @@ class CastPanel(tk.Frame):
         if not sel:
             return
         idx = self.cast_tree.index(sel[0])
-        if messagebox.askyesno("Remover", f"Excluir '{self.casting[idx]['name']}'?"):
+        if ask_confirmation(self, "Remover", f"Excluir '{self.casting[idx]['name']}'?"):
             self.casting.pop(idx)
             self.refresh_cast_tree()
             self.on_save()
@@ -110,3 +130,19 @@ class CastPanel(tk.Frame):
         entry.bind("<Return>", commit)
         entry.bind("<Escape>", lambda *_: entry.destroy())
         entry.bind("<FocusOut>", lambda *_: entry.destroy())
+
+    def _show_context_menu(self, event: tk.Event) -> None:
+        """Exibe a ação de imagens para o integrante clicado."""
+
+        item_id = self.cast_tree.identify_row(event.y)
+        if not item_id:
+            return
+        self.cast_tree.selection_set(item_id)
+        self.context_menu.tk_popup(event.x_root, event.y_root)
+
+    def _manage_images(self) -> None:
+        """Abre a seleção de imagens para o integrante selecionado."""
+
+        selection = self.cast_tree.selection()
+        if selection:
+            self.on_manage_images(self.casting[self.cast_tree.index(selection[0])])
