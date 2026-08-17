@@ -7,10 +7,18 @@ from unittest.mock import Mock
 import pytest
 
 from gui import ChapterEditor, SettingsWindow
+from gui.add_item_dialog import AddItemDialog, FormField
 from gui.chapter_panel import ChapterPanel
+from gui.image_association_dialog import ImageAssociationDialog
 from gui.metadata_panel import MetadataPanel
 from gui.player_widget import PlayerWidget
 from gui.settings_dialog import SettingsWindow as DirectSettingsWindow
+
+
+def _confirm_add_dialog(_, __, fields, on_submit):
+    """Confirma um formulário de inclusão com seus valores pré-preenchidos."""
+
+    assert on_submit({field.name: field.value for field in fields}) is None
 
 
 def test_gui_package_exports() -> None:
@@ -121,7 +129,20 @@ def test_tempo_atual_do_player_nunca_e_negativo() -> None:
     assert player_widget.get_current_time_ms() == 0
 
 
-def test_adicionar_subcapitulos_em_varios_niveis_expande_ancestrais() -> None:
+def test_cancelar_incorporacao_pendente_do_player() -> None:
+    """Evita que um callback atrasado tente usar um canvas já destruído."""
+
+    player_widget = object.__new__(PlayerWidget)
+    player_widget.embed_after = "callback-1"
+    player_widget.after_cancel = Mock()
+
+    player_widget._cancel_embed_schedule()
+
+    player_widget.after_cancel.assert_called_once_with("callback-1")
+    assert player_widget.embed_after is None
+
+
+def test_adicionar_subcapitulos_em_varios_niveis_expande_ancestrais(monkeypatch: pytest.MonkeyPatch) -> None:
     """Cria filhos diretos em qualquer nível e amplia todos os pais necessários."""
 
     root_chapter = {"title": "Pai", "start": 0, "end": 10, "subs": []}
@@ -134,6 +155,7 @@ def test_adicionar_subcapitulos_em_varios_niveis_expande_ancestrais() -> None:
     panel.get_current_time = Mock(return_value=20)
     panel.refresh_chap_tree = Mock()
     panel.on_save = Mock()
+    monkeypatch.setattr("gui.chapter_panel.AddItemDialog", _confirm_add_dialog)
 
     panel.add_subchapter()
 
@@ -154,7 +176,7 @@ def test_adicionar_subcapitulos_em_varios_niveis_expande_ancestrais() -> None:
     assert root_chapter["end"] == 45
 
 
-def test_adicionar_capitulo_cria_irmao_do_selecionado() -> None:
+def test_adicionar_capitulo_cria_irmao_do_selecionado(monkeypatch: pytest.MonkeyPatch) -> None:
     """Mantém o novo capítulo no mesmo nível hierárquico do item selecionado."""
 
     first_child = {"title": "Sub 1", "start": 5, "end": 15, "subs": []}
@@ -168,6 +190,7 @@ def test_adicionar_capitulo_cria_irmao_do_selecionado() -> None:
     panel.get_current_time = Mock(return_value=18)
     panel.refresh_chap_tree = Mock()
     panel.on_save = Mock()
+    monkeypatch.setattr("gui.chapter_panel.AddItemDialog", _confirm_add_dialog)
 
     panel.add_chapter()
 
@@ -176,7 +199,7 @@ def test_adicionar_capitulo_cria_irmao_do_selecionado() -> None:
     assert root_chapter["end"] == 28
 
 
-def test_adicionar_filho_transfere_valor_do_metadado() -> None:
+def test_adicionar_filho_transfere_valor_do_metadado(monkeypatch: pytest.MonkeyPatch) -> None:
     """Move o valor do pai para o novo filho, que permanece uma folha."""
 
     node = {"key": "autor", "value": "Eduardo", "children": []}
@@ -187,6 +210,7 @@ def test_adicionar_filho_transfere_valor_do_metadado() -> None:
     panel.tree.selection.return_value = ("root",)
     panel.refresh_tree = Mock()
     panel.on_save = Mock()
+    monkeypatch.setattr("gui.metadata_panel.AddItemDialog", _confirm_add_dialog)
 
     panel.add_child()
 
@@ -194,3 +218,41 @@ def test_adicionar_filho_transfere_valor_do_metadado() -> None:
     assert node["children"] == [{"key": "chave_1", "value": "Eduardo", "children": []}]
     panel.refresh_tree.assert_called_once_with(node["children"][0])
     panel.on_save.assert_called_once()
+
+
+def test_dialogo_de_imagens_salva_apenas_as_marcadas(tk_root: tk.Tk) -> None:
+    """Substitui os vínculos do registro pelas caixas confirmadas no diálogo."""
+
+    first = {"id": "imagem-1"}
+    second = {"id": "imagem-2"}
+    dialog = object.__new__(ImageAssociationDialog)
+    dialog.images = [first, second]
+    dialog.record = {"images": ["imagem-1"]}
+    dialog.selected = {
+        "imagem-1": tk.BooleanVar(tk_root, value=False),
+        "imagem-2": tk.BooleanVar(tk_root, value=True),
+    }
+    dialog.on_save = Mock()
+    dialog.destroy = Mock()
+
+    dialog.save()
+
+    assert dialog.record["images"] == ["imagem-2"]
+    dialog.on_save.assert_called_once()
+    dialog.destroy.assert_called_once()
+
+
+def test_formulario_de_inclusao_foca_e_seleciona_primeiro_campo(tk_root: tk.Tk) -> None:
+    """Permite substituir imediatamente o valor sugerido ao abrir o formulário."""
+
+    tk_root.deiconify()
+    try:
+        dialog = AddItemDialog(tk_root, "Teste", [FormField("name", "Nome", "Valor sugerido")], lambda _: None)
+        tk_root.update()
+
+        field = dialog.widgets["name"]
+        assert dialog.focus_get() is field
+        assert field.selection_present()
+        dialog.destroy()
+    finally:
+        tk_root.withdraw()
