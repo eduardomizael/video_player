@@ -1,6 +1,14 @@
 # Python-generated files
 __pycache__/
 *.py[oc]
+# Caches e relatórios de validação
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
 # PyInstaller
 *.spec
 build/
@@ -9,5 +17,34 @@ wheels/
 *.egg-info
 
 # Virtual environments
-.venv
+.venv/
+# Dados locais da aplicação (incluindo fontes antigas de migração)
 config.json
+video_history.sqlite3
+video_history.sqlite3-journal
+video_history.sqlite3-wal
+video_history.sqlite3-shm
+config.vdb
+config.vdb-journal
+config.vdb-wal
+config.vdb-shm
+*.corrompido_*.bak
+
+# Projetos, legendas e vídeos pessoais usados durante a execução
+*.chp
+*.chp-journal
+*.chp-wal
+*.chp-shm
+*.srt
+*.srt.bak
+*.mp4
+*.m4v
+*.webm
+*.mov
+*.mkv
+*.avi
+*.ogv
+
+# Amostras sintéticas intencionais podem ser mantidas como fixtures de teste
+!tests/fixtures/
+!tests/fixtures/**
