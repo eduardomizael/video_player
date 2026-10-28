@@ -138,13 +138,10 @@ def main() -> None:
         config = default_config()
         backup_message = f"\n\nUma cópia foi preservada em:\n{exc.backup_path}" if exc.backup_path else ""
         messagebox.showwarning(
-            "Configuração restaurada",
-            f"O arquivo de configuração estava ilegível e os valores padrão serão restaurados.{backup_message}",
+            "Configuração indisponível",
+            f"Não foi possível ler o banco ou migrar os arquivos antigos. "
+            f"Os padrões serão usados nesta sessão, sem substituir os dados existentes.{backup_message}",
         )
-        try:
-            save_config(config)
-        except OSError as save_error:
-            messagebox.showerror("Erro ao salvar configuração", str(save_error))
 
     # Aplica configuração de Sempre no Topo (Always on Top)
     always_on_top_var = tk.BooleanVar(value=config.get("always_on_top", False))

@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import sys
-import tempfile
 from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from app_storage import StorageError, open_storage
 
 
 def _application_dir() -> Path:
@@ -19,12 +19,14 @@ def _application_dir() -> Path:
     return Path(__file__).resolve().parent
 
 
-CONFIG_PATH = _application_dir() / "config.json"
+CONFIG_PATH = _application_dir() / "config.vdb"
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "update_ms": 500,
     "small_jump": 5,
     "large_jump": 20,
+    "video_scroll_jump": 5,
+    "track_scroll_jump": 20,
     "volume": 100,
     "always_on_top": False,
     "window_geometry": "",
@@ -89,6 +91,8 @@ def normalize_config(config: object) -> dict[str, Any]:
     normalized["update_ms"] = _bounded_int(config.get("update_ms"), 500, 50, 60_000)
     normalized["small_jump"] = _bounded_int(config.get("small_jump"), 5, 1, 3_600)
     normalized["large_jump"] = _bounded_int(config.get("large_jump"), 20, 1, 3_600)
+    normalized["video_scroll_jump"] = _bounded_int(config.get("video_scroll_jump"), 5, 1, 3_600)
+    normalized["track_scroll_jump"] = _bounded_int(config.get("track_scroll_jump"), 20, 1, 3_600)
     normalized["volume"] = _bounded_int(config.get("volume"), 100, 0, 100)
     normalized["always_on_top"] = config.get("always_on_top", False) is True
 
@@ -120,45 +124,25 @@ def load_config() -> dict[str, Any]:
     """Carrega e normaliza a configuração armazenada ao lado da aplicação."""
 
     path = Path(CONFIG_PATH)
-    if not path.exists():
-        return default_config()
-
     try:
-        with path.open("r", encoding="utf-8") as file_handle:
-            loaded = json.load(file_handle)
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise ConfigLoadError(path, _backup_corrupted_config(path), exc) from exc
-    if not isinstance(loaded, dict):
-        reason = TypeError("a raiz da configuração deve ser um objeto JSON")
-        raise ConfigLoadError(path, _backup_corrupted_config(path), reason)
+        with open_storage(path) as connection:
+            loaded = {key: json.loads(value) for key, value in connection.execute("SELECT key, value FROM settings")}
+    except StorageError as exc:
+        raise ConfigLoadError(exc.path, _backup_corrupted_config(exc.path), exc) from exc
     return normalize_config(loaded)
 
 
 def save_config(config: dict[str, Any]) -> None:
-    """Grava a configuração de forma atômica ao lado da aplicação."""
+    """Grava todas as preferências em uma transação, preservando a biblioteca."""
 
     path = Path(CONFIG_PATH)
-    path.parent.mkdir(parents=True, exist_ok=True)
     normalized = normalize_config(config)
+    with open_storage(path) as connection:
+        for (stored_value,) in connection.execute("SELECT value FROM settings"):
+            json.loads(stored_value)
+        connection.executemany(
+            "INSERT INTO settings VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            [(key, json.dumps(value, ensure_ascii=False)) for key, value in normalized.items()],
+        )
     config.clear()
     config.update(deepcopy(normalized))
-
-    temporary_path: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            "w",
-            encoding="utf-8",
-            dir=path.parent,
-            prefix=f".{path.name}.",
-            suffix=".tmp",
-            delete=False,
-        ) as file_handle:
-            json.dump(normalized, file_handle, ensure_ascii=False, indent=2)
-            file_handle.write("\n")
-            file_handle.flush()
-            os.fsync(file_handle.fileno())
-            temporary_path = Path(file_handle.name)
-        os.replace(temporary_path, path)
-    finally:
-        if temporary_path is not None and temporary_path.exists():
-            temporary_path.unlink()
