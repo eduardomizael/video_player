@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Editor de Capítulos</title>
+    <link rel="icon" href="app-icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <img class="brand-mark" src="app-icon.svg" alt="" aria-hidden="true" />
+        <div>Editor de Capítulos<small>ESTÚDIO DE EDIÇÃO</small></div>
+      </div>
+      <div class="file-info">
+        <span class="file-dot"></span
+        ><span id="filename">Nenhum vídeo aberto</span>
+      </div>
+      <button id="open" class="primary">＋ Abrir vídeo</button>
+    </header>
+    <main>
+      <section class="workspace" aria-label="Reprodução e linha do tempo">
+        <div class="section-heading">
+          <span><span class="eyebrow">MONITOR</span> Prévia do vídeo</span
+          ><button id="help" class="quiet">Atalhos <kbd>?</kbd></button>
+        </div>
+        <div id="stage" class="stage">
+          <video
+            id="video"
+            preload="metadata"
+            playsinline
+            aria-label="Vídeo em edição"
+          ></video>
+          <div id="empty-player" class="empty-player">
+            <span class="empty-symbol">▷</span>
+            <h1>Uma nova perspectiva<br />para suas histórias.</h1>
+            <p>
+              Abra um vídeo para organizar capítulos,<br />sincronizar legendas
+              e reunir os detalhes.
+            </p>
+            <button id="open-empty" class="primary">Escolher vídeo</button
+            ><small>Arquivos locais · sem upload</small>
+          </div>
+          <div id="subtitle" class="subtitle" aria-live="off"></div>
+          <div id="media-error" class="media-error" hidden></div>
+        </div>
+        <div class="transport">
+          <div class="scrub-row">
+            <output id="current">00:00.000</output
+            ><input
+              id="seek"
+              type="range"
+              min="0"
+              max="1000"
+              value="0"
+              step="1"
+              aria-label="Posição do vídeo"
+            /><output id="duration">00:00.000</output>
+          </div>
+          <div class="transport-row">
+            <div class="transport-left">
+              <span class="live-dot"></span
+              ><span id="playback-state">Sem vídeo</span>
+            </div>
+            <div class="play-buttons">
+              <button id="back" title="Retroceder (←)">
+                ↶ <small id="back-label">5s</small></button
+              ><button
+                id="play"
+                class="play"
+                title="Reproduzir ou pausar (Espaço)"
+                aria-label="Reproduzir"
+              >
+                ▶</button
+              ><button id="forward" title="Avançar (→)">
+                <small id="forward-label">5s</small> ↷
+              </button>
+            </div>
+            <div class="audio">
+              <button id="mute" title="Silenciar" aria-label="Silenciar">
+                ♪</button
+              ><input
+                id="volume"
+                aria-label="Volume"
+                type="range"
+                min="0"
+                max="100"
+                value="100"
+              /><button
+                id="fullscreen"
+                title="Tela cheia"
+                aria-label="Tela cheia"
+              >
+                ⛶
+              </button>
+            </div>
+          </div>
+        </div>
+        <section class="timeline">
+          <div class="section-heading">
+            <span
+              ><span class="eyebrow">NAVEGAÇÃO</span> Capítulos no tempo</span
+            ><span id="chapter-count" class="muted">0 capítulos</span>
+          </div>
+          <div id="ruler" class="ruler"><span>00:00</span><span>—</span></div>
+          <div id="chapter-track" class="chapter-track">
+            <span class="timeline-empty">Seus capítulos aparecerão aqui.</span>
+          </div>
+          <p class="timeline-hint">
+            Clique em um capítulo para ir ao início.
+            <span id="time-detail">O vídeo original permanece intacto.</span>
+          </p>
+        </section>
+        <footer class="workspace-footer">
+          <span id="file-path">PRONTO PARA COMEÇAR</span
+          ><span>LOCAL & PRIVADO</span>
+        </footer>
+      </section>
+      <aside class="editor-panel" aria-label="Dados do vídeo">
+        <div class="panel-title">
+          <div>
+            <span class="eyebrow">SEU PROJETO</span>
+            <h2>Organize cada detalhe</h2>
+          </div>
+          <span class="project-icon">▤</span>
+        </div>
+        <nav class="tabs" aria-label="Seções do projeto">
+          <button data-tab="chapters" class="active">Capítulos</button
+          ><button data-tab="subtitles">Legendas</button
+          ><button data-tab="casting">Elenco</button
+          ><button data-tab="metadata">Metadados</button
+          ><button data-tab="images">Imagens</button>
+        </nav>
+        <div class="panel-tools">
+          <label class="search"
+            ><span>⌕</span
+            ><input
+              id="search"
+              type="search"
+              placeholder="Buscar capítulos…"
+              aria-label="Buscar nesta seção"
+          /></label>
+          <div class="split-button">
+            <button id="add" class="primary" disabled>＋ Capítulo</button>
+            <button
+              id="add-options"
+              class="primary"
+              disabled
+              aria-label="Opções para criar capítulos"
+              aria-haspopup="menu"
+              aria-expanded="false"
+              aria-controls="action-menu"
+            >
+              ▾
+            </button>
+          </div>
+        </div>
+        <div class="list-heading">
+          <span id="list-label">CAPÍTULOS</span
+          ><span id="item-count">0 ITENS</span>
+        </div>
+        <div id="records" class="records"></div>
+        <div class="selection-tools">
+          <span id="selection-label">Selecione um item para editar</span>
+          <div>
+            <button id="jump" class="quiet" disabled>▷ Ir ao tempo</button
+            ><button id="child" class="quiet" disabled>＋ Filho</button
+            ><button id="edit" disabled>Editar</button
+            ><button
+              id="remove"
+              class="danger"
+              disabled
+              aria-label="Excluir item"
+            >
+              Excluir
+            </button>
+          </div>
+        </div>
+        <div class="panel-note">
+          <span class="live-dot"></span
+          ><span id="save-status" role="status"
+            >As alterações são salvas ao confirmar a edição.</span
+          >
+        </div>
+      </aside>
+    </main>
+    <div
+      id="action-menu"
+      class="action-menu"
+      popover="auto"
+      role="menu"
+      aria-label="Ações do capítulo"
+    ></div>
+    <div id="toast" role="status" hidden></div>
+    <dialog id="editor-dialog">
+      <form id="edit-form">
+        <div class="dialog-heading">
+          <div>
+            <span class="eyebrow">EDIÇÃO</span>
+            <h2 id="dialog-title">Novo capítulo</h2>
+          </div>
+          <button
+            type="button"
+            id="close-dialog"
+            class="quiet"
+            aria-label="Fechar"
+          >
+            ✕
+          </button>
+        </div>
+        <div id="fields"></div>
+        <p id="form-error" class="form-error" role="alert"></p>
+        <div class="dialog-actions">
+          <button type="button" id="cancel-dialog">Cancelar</button
+          ><button type="submit" id="submit" class="primary">
+            Salvar alterações
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="help-dialog">
+      <div class="dialog-heading">
+        <h2>Seu ritmo de edição</h2>
+        <button id="close-help" aria-label="Fechar">✕</button>
+      </div>
+      <p>Os atalhos ficam desativados enquanto você digita.</p>
+      <dl class="shortcuts">
+        <dt>Reproduzir / pausar</dt>
+        <dd id="key-play">Espaço</dd>
+        <dt>Salto curto</dt>
+        <dd id="key-short">← / →</dd>
+        <dt>Salto longo</dt>
+        <dd id="key-long">Shift + ← / →</dd>
+        <dt>Tela cheia</dt>
+        <dd>F</dd>
+      </dl>
+      <p class="muted">
+        Os intervalos e atalhos de reprodução seguem o config.json. Volume
+        ajustável nesta sessão.
+      </p>
+    </dialog>
+    <script src="app.js"></script>
+  </body>
+</html>
