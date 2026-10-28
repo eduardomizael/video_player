@@ -9,6 +9,9 @@ dependencies = [
     "python-vlc>=3.0.21203",
 ]
 
+[project.optional-dependencies]
+webview = ["pywebview>=6.0,<7"]
+
 [dependency-groups]
 dev = [
     "black>=25.1.0",
