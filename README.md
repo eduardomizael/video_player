@@ -1,6 +1,10 @@
 # Video Player/Editor
 
-Aplicativo simples escrito em Python 3.12 que usa `python-vlc` para reprodução de vídeos. Permite adicionar e editar capítulos de arquivos MP4.
+Editor desktop em Python 3.12 para capítulos, legendas, elenco, metadados e imagens associados a vídeos locais.
+Possui uma interface clássica em Tkinter/VLC e uma interface alternativa em pywebview com reprodução HTML5.
+
+A organização dos módulos, os esquemas de armazenamento e as limitações conhecidas estão descritos em
+[Arquitetura e armazenamento](docs/ARQUITETURA.md).
 
 ## Recursos
 
@@ -15,11 +19,12 @@ Aplicativo simples escrito em Python 3.12 que usa `python-vlc` para reprodução
 - Aba de imagens: recorte por posicionamento e zoom, abertura de arquivo ou colagem da área de transferência e associação de imagens a capítulos, elenco ou metadados
 - Arquivo `.chp` (SQLite) por vídeo para capítulos, elenco, metadados e imagens; imagens são armazenadas como dados binários recortados, sem manter o original
 - Menu para abrir novos arquivos
-- Arquivo `config.json`, mantido ao lado do `app.py` ou do executável, armazena:
+- Banco SQLite `config.vdb`, mantido ao lado do `app.py` ou do executável, armazena:
   - Intervalo de atualização da interface
   - Tempo dos saltos rápidos (curto e longo)
   - Teclas de atalho para play/pause e avanço/retrocesso
   - Nível de volume do player
+  - Biblioteca de vídeos com recursos salvos
 - Botões de avançar/retroceder
 - Roda do mouse sobre a barra de progresso para saltos longos
 - Controles reorganizados em duas linhas com tempo e barra de progresso na parte superior e botões de reprodução na inferior
@@ -27,7 +32,8 @@ Aplicativo simples escrito em Python 3.12 que usa `python-vlc` para reprodução
 - Tela de configurações para definir atalhos (basta pressionar a tecla desejada)
 - Validação dos intervalos de capítulos, subcapítulos e legendas antes do salvamento
 - Salvamento atômico das legendas, com cópia `.bak` da versão anterior; os dados `.chp` são gravados em transações SQLite
-- Preservação de configurações corrompidas em um arquivo `.corrompido_*.bak` antes de restaurar os padrões
+- Tentativa de preservar configurações ilegíveis em `.corrompido_*.bak`; os padrões valem apenas para a sessão
+  e não substituem um banco ilegível
 
 ## Instalação
 
@@ -38,10 +44,21 @@ Aplicativo simples escrito em Python 3.12 que usa `python-vlc` para reprodução
 
 Execute `python app.py` (ou `uv run python app.py`) para iniciar o programa e escolha o vídeo que deseja editar.
 
-Ao salvar informações de um vídeo, o aplicativo cria um arquivo `.chp` ao lado dele. Esse arquivo é SQLite e substitui o uso padrão do JSON. Arquivos JSON existentes não são convertidos automaticamente nesta versão.
+Ao salvar capítulos, elenco, metadados ou imagens, o aplicativo cria um `.chp` SQLite ao lado do vídeo.
+Legendas são gravadas separadamente em `.srt` e, sozinhas, não criam `.chp`. Apenas abrir um vídeo sem recursos
+existentes não cria esses arquivos. Arquivos JSON antigos de **projeto** não são convertidos automaticamente;
+a migração de `config.json`, descrita abaixo, refere-se somente às preferências da aplicação.
 
-O `config.json` é resolvido pelo local da aplicação, independentemente do diretório em que o comando foi executado. No
+O `config.vdb` é resolvido pelo local da aplicação, independentemente do diretório em que o comando foi executado. No
 modo fonte ele fica ao lado de `app.py`; no executável ele fica ao lado de `EditorDeCapitulos.exe`.
+
+Configurações e biblioteca compartilham esse único arquivo SQLite, com tabelas separadas. Na primeira execução,
+o aplicativo importa automaticamente as preferências de `config.json` e o histórico de `video_history.sqlite3`
+existentes na mesma pasta. A importação ocorre em uma transação e não apaga nem altera os arquivos antigos.
+Depois da migração, somente `config.vdb` é usado; mudanças posteriores nos arquivos antigos não são reimportadas.
+Se uma fonte antiga estiver ilegível, a migração é interrompida sem substituir os dados por valores padrão.
+Os arquivos `.chp` e `.srt` de cada vídeo permanecem junto dos vídeos e não são incorporados ao banco da aplicação.
+Evite editar diretamente o banco enquanto o aplicativo estiver aberto; use a tela de configurações.
 
 ## Interface alternativa em webview
 
@@ -69,10 +86,27 @@ foi feita no Windows com WebView2; não há validação de execução ou distrib
 
 ### Recursos da interface web
 
+- **Biblioteca**, ao lado de **Abrir vídeo**, mantém entre sessões a lista de vídeos com qualquer recurso salvo,
+  incluindo legendas `.srt`. Abrir um vídeo sem salvar recursos não o inclui nem cria seu `.chp`.
+  Vídeos com `.chp` ou `.srt` existentes entram na biblioteca ao serem abertos. Para localizar projetos antigos,
+  use **Adicionar pasta**: a busca inclui as subpastas e reconhece os formatos de vídeo do seletor.
+  A biblioteca permite buscar por nome ou caminho e reabrir o vídeo com seus recursos, ordenando os mais recentes
+  primeiro. Arquivos movidos ou apagados permanecem sinalizados como indisponíveis.
+  O índice fica no mesmo `config.vdb` das configurações, ao lado da aplicação ou executável e separado dos
+  projetos. Não há limite de quantidade nem reprodução automática em sequência.
 - Reprodução HTML5 com pausa, saltos, volume, silenciamento, tela cheia e linha do tempo proporcional. Subcapítulos
   são desenhados por cima dos pais, na mesma faixa. Capítulos principais simultâneos usam faixas diferentes;
   capítulos sem sobreposição temporal podem compartilhar a faixa. Há rolagem vertical para projetos maiores.
-- Atalhos e intervalos de salto lidos do `config.json`; os atalhos não interferem na digitação dos formulários.
+- Atalhos e intervalos de salto lidos do `config.vdb`; os atalhos não interferem na digitação dos formulários.
+- Engrenagem no cabeçalho da prévia para abrir **Configurações**: ajuste o salto do scroll sobre a barra de
+  progresso e o salto dos botões ao lado do play, em segundos inteiros de 1 a 3600. **Salvar configurações**
+  aplica os valores imediatamente e os mantém no `config.vdb` entre sessões; **Cancelar** descarta a edição.
+  O scroll compartilha o intervalo do salto longo do teclado e os botões compartilham o salto curto.
+  A lista de **Atalhos de teclado** fica dentro dessa tela; a tecla **?** também abre as configurações.
+- O scroll sobre o **vídeo** e sobre a **linha do tempo** (régua e faixa de capítulos) possui intervalos
+  independentes, também ajustáveis nas configurações. Os padrões são 5 segundos sobre o vídeo e 20 segundos
+  sobre a linha do tempo. Rolar para cima avança; para baixo retrocede, respeitando o início e o fim do vídeo.
+  Os intervalos dos botões, da barra de progresso e dos atalhos continuam separados desses dois ajustes.
 - Capítulos e subcapítulos, com irmãos ordenados pelo início e expansão automática do fim dos ancestrais.
 - Edição e exibição das legendas `.srt`, com precisão de milissegundos. O texto é exibido literalmente, sem interpretar HTML.
 - Edição de elenco e metadados hierárquicos; ao criar um filho, o valor do metadado pai é transferido à folha.
@@ -95,7 +129,7 @@ coincidem são separados verticalmente; os demais reutilizam uma faixa livre. O 
 Nos metadados, **Novo** cria um item na raiz
 e **Filho** adiciona um descendente. As alterações são gravadas ao confirmar o formulário; não existe gravação
 automática de rascunhos. O volume alterado na interface web vale para a sessão atual. A configuração compartilhada
-é lida sem ser sobrescrita pela nova interface; sua edição continua disponível na interface clássica.
+permite editar os intervalos de salto na interface web; as teclas de reprodução continuam editáveis na interface clássica.
 
 ### Compatibilidade e arquivos locais
 
@@ -121,6 +155,7 @@ em um serviço web público nem constitui suporte a Android/iOS.
 ```powershell
 uv run black --line-length 120 .
 uv run ruff check .
+uv run python -m py_compile (rg --files -g '*.py')
 uv run python -m pytest -q
 ```
 
@@ -132,6 +167,9 @@ uma pasta temporária e cria seus próprios dados de teste; não altera os arqui
 uv run --extra webview python -m tests.webview_smoke "C:\Videos\amostra.mp4" "C:\Videos\amostra.webm"
 ```
 
+O comando de sintaxe acima usa PowerShell e exige `rg` (ripgrep). Os testes Tkinter exigem uma sessão gráfica;
+os testes do servidor usam loopback e os de persistência precisam criar e alterar arquivos temporários.
+
 Use amostras curtas com duração superior a 9 segundos para a primeira amostra e superior a 1 segundo para as demais.
 No Windows foram verificadas janelas de 1440×900, 1024×768, 860×620 e 640×700, além da inspeção visual da janela inicial.
 Esses testes não substituem a avaliação com vídeos reais nem comprovam saída de áudio nos alto-falantes.
@@ -141,7 +179,7 @@ Esses testes não substituem a avaliação com vídeos reais nem comprovam saíd
 Para gerar uma versão executável standalone no Windows:
 
 - **Via terminal**: Execute `uv run python build.py` ou `python build.py`.
-- **Via clique duplo**: Clique duas vezes no arquivo [`build.bat`](file:///c:/Users/eduar/Desktop/chapter_editor/build.bat).
+- **Via clique duplo**: Clique duas vezes no arquivo [build.bat](build.bat).
 
 O executável final será gerado dentro do diretório `dist/EditorDeCapitulos.exe`.
 
@@ -163,8 +201,9 @@ O **Microsoft Edge WebView2 Runtime** e o **.NET Framework 4.6.2 ou superior**, 
 devem estar instalados no destino. O build não instala nem incorpora esses runtimes do sistema.
 O suporte a codecs segue as mesmas condições da execução em código-fonte.
 
-Distribua o executável, sem incluir os vídeos ou arquivos de teste da pasta `build/`. Um `config.json` opcional
-ao lado do executável permite reaproveitar as preferências; os arquivos `.chp` e `.srt` continuam junto dos vídeos.
+Distribua o executável, sem incluir os vídeos ou arquivos de teste da pasta `build/`. Para levar as preferências
+e a biblioteca para outra instalação, copie o `config.vdb` com o aplicativo fechado e coloque-o ao lado do executável.
+Os arquivos `.chp` e `.srt` continuam junto dos vídeos. Caminhos da biblioteca precisam continuar acessíveis no destino.
 Os recursos da interface são extraídos automaticamente para uma pasta temporária pelo PyInstaller ao abrir o `.exe`.
 O build usa caminhos relativos à localização de `build.py`, independentemente da pasta atual do terminal.
 
@@ -175,4 +214,16 @@ O símbolo verde do cabeçalho também é o ícone da janela e do executável we
 O executável webview foi gerado e aberto no Windows local a partir de outra pasta, com carregamento dos recursos
 empacotados, leitura dos capítulos e reprodução de uma amostra MP4. Essa verificação não substitui um teste de
 instalação em outro computador sem as ferramentas de desenvolvimento.
+
+## Versionamento e dados locais
+
+O repositório deve conter código-fonte, testes, documentação, `pyproject.toml`, `uv.lock`, scripts de build e
+os ícones da aplicação. As definições das tabelas ficam no código-fonte: `app_storage.py` para `config.vdb`
+e `logic.py` para `.chp`. O banco local e os projetos pessoais não substituem essas definições no Git.
+
+O `.gitignore` exclui ambientes virtuais, caches, relatórios de cobertura, builds, executáveis gerados,
+configurações locais, bancos de histórico antigos, arquivos `.chp`, legendas e vídeos pessoais.
+A pasta `tests/fixtures/` é uma exceção para amostras sintéticas que se decida versionar explicitamente.
+Ignorar um arquivo não remove um arquivo já rastreado: confira `git status --short` e `git ls-files` antes de cada commit.
+Os commits dependem de autorização expressa e devem seguir as instruções de `AGENTS.md`.
 
