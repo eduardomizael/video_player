@@ -10,7 +10,7 @@ const labels = {
   images: "Imagens",
 };
 let state = { data: {}, subtitles: [], revision: 0 },
-  settings = { small_jump: 5, large_jump: 20, volume: 100 };
+  settings = { small_jump: 5, large_jump: 20, video_scroll_jump: 5, track_scroll_jump: 20, volume: 100 };
 let tab = "chapters",
   selected = null,
   bridge = null,
@@ -118,6 +118,7 @@ function title(node) {
   return node.title || node.name || node.key || node.text || "Sem título";
 }
 function accept(next, opening = false) {
+  if (next.history_warning) notify(next.history_warning, true);
   state = next;
   // SRT não possui identificadores persistentes; os IDs abaixo existem apenas nesta sessão.
   state.subtitles.forEach((node) => {
@@ -773,18 +774,145 @@ $("editor-dialog").oncancel = (event) => {
   event.preventDefault();
   closeEditor();
 };
-$("help").onclick = () => $("help-dialog").showModal();
-$("close-help").onclick = () => $("help-dialog").close();
+let libraryEntries = [], libraryBusy = false;
+function renderLibrary() {
+  const query = $("library-search").value.trim().toLocaleLowerCase("pt-BR");
+  const visible = libraryEntries.filter(entry =>
+    `${entry.name} ${entry.path}`.toLocaleLowerCase("pt-BR").includes(query));
+  $("library-records").innerHTML = visible.length ? visible.map(entry => `
+    <button class="library-record" data-history-id="${escapeHtml(entry.id)}" ${!entry.available || libraryBusy ? "disabled" : ""}>
+      <span class="library-video-icon" aria-hidden="true">▷</span>
+      <span class="library-video-info"><strong>${escapeHtml(entry.name)}</strong>
+      <span class="library-path">${escapeHtml(entry.path)}</span>
+      <span class="muted">${entry.available ? `Último acesso: ${escapeHtml(new Date(entry.accessed).toLocaleString("pt-BR"))}` : "Indisponível · arquivo movido ou apagado"}</span></span>
+      <span aria-hidden="true">›</span>
+    </button>`).join("") : `<div class="empty-list"><span>▤</span><strong>${query ? "Nenhum vídeo encontrado" : "Sua biblioteca começa aqui"}</strong>${query ? "Tente outro nome ou caminho." : "Salve um recurso em um vídeo ou adicione uma pasta com projetos existentes."}</div>`;
+}
+function setLibraryBusy(value) {
+  libraryBusy = value;
+  $("import-library").disabled = value;
+  renderLibrary();
+}
+$("library").onclick = async () => {
+  $("library-search").value = "";
+  $("library-error").textContent = "";
+  $("library-status").textContent = "Carregando biblioteca…";
+  libraryEntries = [];
+  setLibraryBusy(true);
+  $("library-dialog").showModal();
+  try {
+    if (!bridge) throw Error("Abra o aplicativo desktop para acessar a biblioteca.");
+    libraryEntries = await bridge.list_history();
+    $("library-status").textContent = `${libraryEntries.length} vídeo(s) na biblioteca`;
+  } catch (error) {
+    $("library-status").textContent = "";
+    $("library-error").textContent = String(error.message || error);
+  } finally {
+    setLibraryBusy(false);
+  }
+};
+$("close-library").onclick = () => { if (!libraryBusy) $("library-dialog").close(); };
+$("library-dialog").oncancel = (event) => { if (libraryBusy) event.preventDefault(); };
+$("library-search").oninput = renderLibrary;
+$("library-records").onclick = async (event) => {
+  const button = event.target.closest("[data-history-id]");
+  if (!button || button.disabled || libraryBusy) return;
+  setLibraryBusy(true);
+  $("library-error").textContent = "";
+  try {
+    accept(await bridge.open_history(button.dataset.historyId), true);
+    $("library-dialog").close();
+  } catch (error) {
+    $("library-error").textContent = String(error.message || error);
+  } finally {
+    setLibraryBusy(false);
+  }
+};
+$("import-library").onclick = async () => {
+  if (libraryBusy || !bridge) return;
+  setLibraryBusy(true);
+  $("library-error").textContent = "";
+  $("library-status").textContent = "Procurando vídeos com recursos salvos…";
+  try {
+    const result = await bridge.import_history();
+    if (result) libraryEntries = result.entries;
+    $("library-status").textContent = result ? `${result.count} vídeo(s) localizado(s) · ${libraryEntries.length} na biblioteca` : `${libraryEntries.length} vídeo(s) na biblioteca`;
+  } catch (error) {
+    $("library-status").textContent = "";
+    $("library-error").textContent = String(error.message || error);
+  } finally {
+    setLibraryBusy(false);
+  }
+};
+function updateJumpLabels() {
+  $("back-label").textContent = $("forward-label").textContent = `${settings.small_jump}s`;
+  $("back").title = `Retroceder ${settings.small_jump} segundos`;
+  $("forward").title = `Avançar ${settings.small_jump} segundos`;
+  $("seek").title = `Scroll: saltar ${settings.large_jump} segundos`;
+  $("stage").title = `Scroll: saltar ${settings.video_scroll_jump} segundos`;
+  $("chapter-track").title = $("ruler").title = `Scroll: saltar ${settings.track_scroll_jump} segundos`;
+}
+let savingSettings = false;
+$("settings").onclick = () => {
+  $("button-jump").value = settings.small_jump;
+  $("scroll-jump").value = settings.large_jump;
+  $("video-scroll-jump").value = settings.video_scroll_jump;
+  $("track-scroll-jump").value = settings.track_scroll_jump;
+  $("settings-error").textContent = "";
+  $("settings-dialog").showModal();
+};
+function closeSettings() {
+  if (!savingSettings) $("settings-dialog").close();
+}
+$("close-settings").onclick = $("cancel-settings").onclick = closeSettings;
+$("settings-dialog").oncancel = (event) => {
+  event.preventDefault();
+  closeSettings();
+};
+$("settings-form").onsubmit = async (event) => {
+  event.preventDefault();
+  if (savingSettings || !$("settings-form").reportValidity()) return;
+  $("settings-error").textContent = "";
+  savingSettings = true;
+  for (const control of $("settings-form").elements) control.disabled = true;
+  try {
+    if (!bridge) throw Error("Abra o aplicativo desktop para salvar as configurações.");
+    const updated = await bridge.save_settings(
+      Number($("button-jump").value), Number($("scroll-jump").value),
+      Number($("video-scroll-jump").value), Number($("track-scroll-jump").value),
+    );
+    settings.small_jump = updated.small_jump;
+    settings.large_jump = updated.large_jump;
+    settings.video_scroll_jump = updated.video_scroll_jump;
+    settings.track_scroll_jump = updated.track_scroll_jump;
+    updateJumpLabels();
+    $("settings-dialog").close();
+    notify("Configurações salvas.");
+  } catch (error) {
+    $("settings-error").textContent = String(error.message || error);
+  } finally {
+    savingSettings = false;
+    for (const control of $("settings-form").elements) control.disabled = false;
+  }
+};
 $("play").onclick = togglePlay;
 video.onclick = togglePlay;
 $("back").onclick = () => seekTo(video.currentTime - settings.small_jump);
 $("forward").onclick = () => seekTo(video.currentTime + settings.small_jump);
 $("seek").oninput = () =>
   seekTo((Number($("seek").value) / 1000) * video.duration);
-$("seek").onwheel = (event) => {
-  event.preventDefault();
-  seekTo(video.currentTime + (event.deltaY < 0 ? 1 : -1) * settings.large_jump);
-};
+for (const [id, preference] of [
+  ["seek", "large_jump"],
+  ["stage", "video_scroll_jump"],
+  ["chapter-track", "track_scroll_jump"],
+  ["ruler", "track_scroll_jump"],
+]) {
+  $(id).addEventListener("wheel", (event) => {
+    if (!event.deltaY || !Number.isFinite(video.duration)) return;
+    event.preventDefault();
+    seekTo(video.currentTime + (event.deltaY < 0 ? 1 : -1) * settings[preference]);
+  }, { passive: false });
+}
 $("volume").oninput = () => {
   video.volume = Number($("volume").value) / 100;
   video.muted = false;
@@ -875,7 +1003,7 @@ document.addEventListener("keydown", (event) => {
       return;
     }
   if (event.key.toLowerCase() === "f") $("fullscreen").click();
-  if (event.key === "?") $("help").click();
+  if (event.key === "?") $("settings").click();
 });
 async function initialize() {
   bridge = window.pywebview?.api;
@@ -885,8 +1013,7 @@ async function initialize() {
     settings = { ...settings, ...initial.settings };
     video.volume = settings.volume / 100;
     $("volume").value = settings.volume;
-    $("back-label").textContent = $("forward-label").textContent =
-      `${settings.small_jump}s`;
+    updateJumpLabels();
     const keys = settings.keys || {};
     $("key-play").textContent = keys.play_pause || "Espaço";
     $("key-short").textContent =

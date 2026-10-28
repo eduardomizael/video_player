@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import sqlite3
 import sys
 from pathlib import Path
 from typing import Any
 
-from config import ConfigLoadError, default_config, load_config
+from config import ConfigLoadError, default_config, load_config, save_config
+from video_history import VideoHistory
 from web_backend import EditorSession, MediaServer
 
 
@@ -22,10 +24,61 @@ class WebApi:
         self._window: Any = None
         self._fullscreen = False
         self._saving = False
+        self._history = VideoHistory()
+
+    def _remember_current(self, snapshot: dict) -> dict:
+        """Atualiza a biblioteca sem transformar falhas do índice em falhas do projeto."""
+        try:
+            if snapshot["path"]:
+                self._history.remember(Path(snapshot["path"]))
+        except (OSError, sqlite3.Error) as exc:
+            snapshot["history_warning"] = f"Os recursos estão disponíveis, mas a biblioteca não foi atualizada: {exc}"
+        return snapshot
 
     def get_state(self) -> dict:
         """Fornece o estado inicial e as preferências de reprodução existentes."""
-        return self._session.snapshot() | {"settings": self._settings, "startup_error": self._startup_error}
+        return self._remember_current(self._session.snapshot()) | {
+            "settings": self._settings,
+            "startup_error": self._startup_error,
+        }
+
+    def list_history(self) -> list[dict]:
+        """Retorna todos os vídeos registrados, inclusive os atualmente indisponíveis."""
+        return self._history.entries()
+
+    def open_history(self, identifier: str) -> dict:
+        """Reabre um vídeo conhecido usando o mesmo carregamento do seletor nativo."""
+        return self._remember_current(self._session.open(str(self._history.resolve(identifier))))
+
+    def import_history(self) -> dict | None:
+        """Solicita uma pasta nativa e inclui seus vídeos com recursos salvos."""
+        import webview
+
+        paths = self._window.create_file_dialog(webview.FileDialog.FOLDER)
+        if not paths:
+            return None
+        count = self._history.import_folder(Path(paths[0]))
+        return {"count": count, "entries": self._history.entries()}
+
+    def save_settings(self, small_jump: int, large_jump: int, video_scroll_jump: int, track_scroll_jump: int) -> dict:
+        """Valida e persiste os saltos, preservando as demais preferências do arquivo."""
+        jumps = {
+            "small_jump": small_jump,
+            "large_jump": large_jump,
+            "video_scroll_jump": video_scroll_jump,
+            "track_scroll_jump": track_scroll_jump,
+        }
+        if any(type(value) is not int or not 1 <= value <= 3_600 for value in jumps.values()):
+            raise ValueError("Use saltos inteiros entre 1 e 3600 segundos.")
+        self._saving = True
+        try:
+            updated = load_config()
+            updated.update(jumps)
+            save_config(updated)
+            self._settings = updated
+            return updated
+        finally:
+            self._saving = False
 
     def open_video(self) -> dict | None:
         """Solicita um vídeo pelo seletor do sistema sem aceitar caminhos da página."""
@@ -36,13 +89,13 @@ class WebApi:
             allow_multiple=False,
             file_types=("Vídeos (*.mp4;*.m4v;*.webm;*.mov;*.mkv;*.avi;*.ogv)", "Todos os arquivos (*.*)"),
         )
-        return self._session.open(paths[0]) if paths else None
+        return self._remember_current(self._session.open(paths[0])) if paths else None
 
     def save_section(self, section: str, items: list[dict], revision: int) -> dict:
         """Persiste uma seção pelos mesmos gerenciadores usados no Tkinter."""
         self._saving = True
         try:
-            return self._session.save(section, items, revision)
+            return self._remember_current(self._session.save(section, items, revision))
         finally:
             self._saving = False
 

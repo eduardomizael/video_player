@@ -135,6 +135,60 @@ kbd {
   font-size: 12px;
   color: #c4cbd6;
 }
+.file-actions {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+#library-dialog {
+  width: min(740px, calc(100vw - 40px));
+}
+.library-tools {
+  display: flex;
+  gap: 12px;
+  margin-top: 22px;
+}
+.library-tools .search {
+  flex: 1;
+  min-width: 0;
+}
+.library-records {
+  max-height: 46dvh;
+  overflow-y: auto;
+}
+.library-record {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 16px;
+  margin: 8px 0;
+  text-align: left;
+}
+.library-record:disabled {
+  opacity: .65;
+}
+.library-video-icon {
+  color: var(--accent);
+  font-size: 24px;
+}
+.library-video-info {
+  display: grid;
+  gap: 7px;
+  flex: 1;
+  min-width: 0;
+}
+.library-video-info strong {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  font-weight: 500;
+}
+.library-path {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 11px;
+}
 .file-info span:last-child {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -146,8 +200,7 @@ kbd {
   border-radius: 50%;
   background: #586072;
 }
-.topbar > .primary {
-  margin-left: auto;
+.file-actions button {
   white-space: nowrap;
 }
 main {
@@ -842,6 +895,59 @@ dialog::backdrop {
   object-fit: contain;
   background: #0b0d11;
 }
+.settings-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.settings-section h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.settings-section p,
+.settings-shortcuts p {
+  font-size: 12px;
+  line-height: 1.6;
+}
+.settings-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px 16px;
+  align-items: center;
+  margin: 24px 0;
+}
+.settings-fields label {
+  font-size: 13px;
+}
+.settings-fields label span {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+}
+.settings-value {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+}
+.settings-value input {
+  width: 85px;
+  background: #10141b;
+  color: var(--text);
+  border: 1px solid #394452;
+  border-radius: 6px;
+  padding: 11px;
+}
+.settings-shortcuts {
+  margin-top: 24px;
+  padding: 18px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.settings-shortcuts summary {
+  cursor: pointer;
+  font-size: 14px;
+}
 .shortcuts {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -978,7 +1084,7 @@ dialog::backdrop {
   .file-info {
     display: none;
   }
-  .topbar > .primary {
+  .file-actions button {
     font-size: 11px;
   }
   .workspace-footer {
