@@ -6,6 +6,7 @@ import shutil
 import sqlite3
 import tempfile
 import uuid
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -322,7 +323,7 @@ class ChapterManager:
         if not path.exists():
             return {"chapters": [], "casting": [], "metadata": [], "images": []}
         try:
-            with self._connect(path) as connection:
+            with closing(self._connect(path)) as connection, connection:
                 self._create_schema(connection)
                 links = self._image_links(connection)
                 chapter_rows = connection.execute("SELECT * FROM chapters ORDER BY position").fetchall()
@@ -430,7 +431,7 @@ class ChapterManager:
 
         path = Path(self.chp_path)
         try:
-            with self._connect(path) as connection:
+            with closing(self._connect(path)) as connection, connection:
                 self._create_schema(connection)
                 connection.execute("DELETE FROM image_links")
                 connection.execute("DELETE FROM chapters")
