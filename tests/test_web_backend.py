@@ -9,8 +9,62 @@ from urllib.request import Request, urlopen
 import pytest
 from PIL import Image
 
+import config as config_module
+from config import default_config, load_config, save_config
 from logic import ChapterManager, SubtitleManager
+from web_app import WebApi
 from web_backend import EditorSession, MediaServer
+
+
+def test_configuracoes_web_persistem_saltos_e_preservam_preferencias(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Reabre os saltos gravados e mantém preferências alteradas depois da inicialização."""
+    monkeypatch.setattr(config_module, "CONFIG_PATH", tmp_path / "config.vdb")
+    api = WebApi(EditorSession(), default_config())
+    existing = default_config()
+    existing.update(volume=42, always_on_top=True)
+    existing["keys"]["play_pause"] = "<p>"
+    save_config(existing)
+    saved = api.save_settings(7, 30, 2, 12)
+    assert saved == load_config() == api.get_state()["settings"]
+    assert saved["small_jump"] == 7 and saved["large_jump"] == 30
+    assert saved["video_scroll_jump"] == 2 and saved["track_scroll_jump"] == 12
+    assert saved["volume"] == 42 and saved["always_on_top"] is True
+    assert saved["keys"]["play_pause"] == "<p>"
+
+
+@pytest.mark.parametrize("value", [0, -1, 3601, 1.5, True, "5", None])
+def test_configuracoes_web_rejeitam_saltos_invalidos(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, value: object
+) -> None:
+    """Recusa entradas inválidas sem criar arquivo ou mudar o estado ativo."""
+    path = tmp_path / "config.vdb"
+    monkeypatch.setattr(config_module, "CONFIG_PATH", path)
+    api = WebApi(EditorSession(), default_config())
+    for index in range(4):
+        jumps = [5, 20, 5, 20]
+        jumps[index] = value
+        with pytest.raises(ValueError, match="inteiros"):
+            api.save_settings(*jumps)
+    assert not path.exists()
+    assert api.get_state()["settings"] == default_config()
+
+
+def test_configuracoes_web_falha_de_escrita_preserva_estado(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Mantém os intervalos ativos quando o disco recusa a gravação."""
+    monkeypatch.setattr(config_module, "CONFIG_PATH", tmp_path / "config.vdb")
+    api = WebApi(EditorSession(), default_config())
+
+    def fail_save(config: dict) -> None:
+        """Simula uma falha de permissão no arquivo de preferências."""
+        raise OSError("Sem permissão")
+
+    monkeypatch.setattr("web_app.save_config", fail_save)
+    with pytest.raises(OSError, match="Sem permissão"):
+        api.save_settings(7, 30, 2, 12)
+    assert api.get_state()["settings"] == default_config()
+    assert not api._saving
 
 
 @pytest.fixture

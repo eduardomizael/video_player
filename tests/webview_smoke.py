@@ -11,7 +11,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-from config import default_config
+import config as config_module
+from config import default_config, load_config
 from logic import ChapterManager, SubtitleManager
 from web_app import WebApi
 from web_backend import EditorSession, MediaServer
@@ -26,6 +27,54 @@ await wait(()=>typeof bridge !== 'undefined' && bridge && state.name && video.re
 video.muted=true; await video.play(); await wait(()=>video.currentTime>.2); video.pause();
 seekTo(1); await wait(()=>Math.abs(video.currentTime-1)<.2 && !video.seeking);
 await check(video.videoWidth>0 && video.duration>0,'Sem vídeo decodificado');
+$('settings').click();
+await check($('settings-dialog').open,'Configurações não abriram');
+$('button-jump').value='7'; $('scroll-jump').value='3';
+$('video-scroll-jump').value='2'; $('track-scroll-jump').value='4';
+$('cancel-settings').click();
+await check(settings.small_jump===5 && settings.large_jump===20,'Cancelar alterou os saltos');
+await check(settings.video_scroll_jump===5 && settings.track_scroll_jump===20,'Cancelar alterou saltos por área');
+$('settings').click();
+$('button-jump').value='0';
+await check(!$('settings-form').checkValidity(),'Salto zero aceito');
+$('button-jump').value='7'; $('scroll-jump').value='3';
+$('video-scroll-jump').value='2'; $('track-scroll-jump').value='4';
+const nativeSaveSettings=bridge.save_settings;
+bridge.save_settings=async()=>{throw Error('Falha simulada');};
+$('settings-form').requestSubmit();
+await wait(()=>!savingSettings);
+await check($('settings-dialog').open && $('settings-error').textContent.includes('Falha simulada') && settings.small_jump===5,'Erro não preservou edição e saltos');
+bridge.save_settings=nativeSaveSettings;
+$('settings-form').requestSubmit();
+await wait(()=>!savingSettings);
+await check(!$('settings-dialog').open && $('back-label').textContent==='7s','Salto não aplicado');
+seekTo(1); $('forward').click(); await check(Math.abs(video.currentTime-8)<.2,'Avanço não usa configuração');
+$('back').click(); await check(Math.abs(video.currentTime-1)<.2,'Retrocesso não usa configuração');
+$('seek').dispatchEvent(new WheelEvent('wheel',{deltaY:-120,cancelable:true}));
+await check(Math.abs(video.currentTime-4)<.2,'Scroll não usa configuração');
+$('seek').dispatchEvent(new WheelEvent('wheel',{deltaY:120,cancelable:true}));
+await check(Math.abs(video.currentTime-1)<.2,'Scroll reverso não usa configuração');
+for (const [id,jump] of [['video',2],['subtitle',2],['chapter-track',4],['ruler',4]]) {
+  seekTo(1);
+  $(id).dispatchEvent(new WheelEvent('wheel',{deltaY:-120,bubbles:true,cancelable:true}));
+  await check(Math.abs(video.currentTime-(1+jump))<.2,`Scroll em ${id} não usa o salto próprio`);
+  $(id).dispatchEvent(new WheelEvent('wheel',{deltaY:120,bubbles:true,cancelable:true}));
+  await check(Math.abs(video.currentTime-1)<.2,`Scroll reverso em ${id} falhou`);
+  $(id).dispatchEvent(new WheelEvent('wheel',{deltaY:0,deltaX:120,bubbles:true,cancelable:true}));
+  await check(Math.abs(video.currentTime-1)<.2,`Scroll horizontal em ${id} alterou o tempo`);
+}
+seekTo(0); $('video').dispatchEvent(new WheelEvent('wheel',{deltaY:120,bubbles:true,cancelable:true}));
+await check(video.currentTime===0,'Scroll ultrapassou o início do vídeo');
+seekTo(video.duration-1); $('chapter-track').dispatchEvent(new WheelEvent('wheel',{deltaY:-120,bubbles:true,cancelable:true}));
+await check(video.currentTime===video.duration,'Scroll ultrapassou o fim do vídeo');
+seekTo(1);
+$('settings').click();
+await check($('button-jump').value==='7' && $('scroll-jump').value==='3','Reabertura perdeu preferências');
+await check($('video-scroll-jump').value==='2' && $('track-scroll-jump').value==='4','Reabertura perdeu saltos por área');
+$('settings-dialog').querySelector('summary').click();
+await check($('settings-dialog').querySelector('details').open && $('key-short').textContent,'Atalhos indisponíveis');
+$('settings-dialog').dispatchEvent(new Event('cancel',{cancelable:true}));
+await check(!$('settings-dialog').open,'Escape não fechou configurações');
 $('add-options').click();
 await check($('action-menu').matches(':popover-open'),'Menu de criação não abriu');
 await check($('action-menu').querySelector('[data-action=child]').disabled,'Subcapítulo habilitado sem pai');
@@ -124,6 +173,19 @@ form.querySelector('input[name=images]').checked=true; await saveEditor({prevent
 await check(items()[0].images.length===1,'Associação não persistida');
 $('search').value='ausente'; render(); await check(!document.querySelector('.record'),'Filtro não aplicado');
 $('search').value=''; tab='chapters'; selected=items()[0].id; render();
+$('library').click(); await wait(()=>!libraryBusy);
+await check($('library-dialog').open && libraryEntries.length===1,'Biblioteca não lista o vídeo salvo');
+$('library-search').value='ausente'; $('library-search').dispatchEvent(new Event('input'));
+await check(!$('library-records').querySelector('[data-history-id]'),'Busca da biblioteca não filtrou');
+$('library-search').value=''; $('library-search').dispatchEvent(new Event('input'));
+const nativeOpenHistory=bridge.open_history;
+bridge.open_history=async()=>{throw Error('Arquivo indisponível');};
+$('library-records').querySelector('button').click(); await wait(()=>!libraryBusy);
+await check($('library-dialog').open && $('library-error').textContent.includes('indisponível'),'Falha de abertura não foi exibida');
+bridge.open_history=nativeOpenHistory;
+$('library-records').querySelector('button').click(); await wait(()=>!libraryBusy);
+await check(!$('library-dialog').open && state.name,'Biblioteca não reabriu o vídeo');
+await wait(()=>video.readyState>=2);
 return {duration:video.duration,width:video.videoWidth,height:video.videoHeight,chapters:flatten(items()).length,
         subtitle:state.subtitles[0], image:state.data.images[0].width};
 """
@@ -155,6 +217,7 @@ def main() -> None:
     args = parser.parse_args()
     failures: list[Exception] = []
     with tempfile.TemporaryDirectory(prefix="chapter_webview_") as directory:
+        config_module.CONFIG_PATH = Path(directory) / "config.vdb"
         samples = []
         for index, path in enumerate(args.videos):
             target = Path(directory) / f"amostra_{index}{path.suffix}"
@@ -179,6 +242,8 @@ def main() -> None:
             try:
                 window.events.loaded.wait(15)
                 result = evaluate_async(window, WORKFLOW)
+                assert load_config()["small_jump"] == 7 and load_config()["large_jump"] == 3
+                assert load_config()["video_scroll_jump"] == 2 and load_config()["track_scroll_jump"] == 4
                 print("FLUXO:", json.dumps(result, ensure_ascii=False), flush=True)
                 data = ChapterManager(str(samples[0])).load()
                 assert data["chapters"][0]["end"] == 9
@@ -205,6 +270,36 @@ def main() -> None:
                     """,
                     )
                     assert menu_layout
+                    settings_layout = evaluate_async(
+                        window,
+                        """
+                        $('settings').click();
+                        $('settings-dialog').querySelector('details').open=true;
+                        const dialog=$('settings-dialog');
+                        const rect=dialog.getBoundingClientRect();
+                        const fits=rect.left>=0 && rect.right<=innerWidth && rect.top>=0 && rect.bottom<=innerHeight
+                            && dialog.scrollWidth<=dialog.clientWidth;
+                        $('close-settings').click();
+                        if(!fits) throw Error('Configurações fora da janela');
+                        return fits;
+                        """,
+                    )
+                    assert settings_layout
+                    library_layout = evaluate_async(
+                        window,
+                        """
+                        $('library').click();
+                        for(let i=0;i<100 && libraryBusy;i++) await new Promise(r=>setTimeout(r,50));
+                        const dialog=$('library-dialog');
+                        const rect=dialog.getBoundingClientRect();
+                        const fits=rect.left>=0 && rect.right<=innerWidth && rect.top>=0 && rect.bottom<=innerHeight
+                            && dialog.scrollWidth<=dialog.clientWidth;
+                        $('close-library').click();
+                        if(!fits) throw Error('Biblioteca fora da janela');
+                        return fits;
+                        """,
+                    )
+                    assert library_layout
                     print("LAYOUT:", width, height, layout, flush=True)
                 for path in samples[1:]:
                     snapshot = session.open(str(path))

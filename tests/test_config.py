@@ -26,7 +26,7 @@ def test_deep_update() -> None:
 def test_load_save_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Testa salvamento atômico e carregamento do arquivo configurado."""
 
-    config_path = tmp_path / "config.json"
+    config_path = tmp_path / "config.vdb"
     monkeypatch.setattr(config_module, "CONFIG_PATH", config_path)
     config = load_config()
     assert config["update_ms"] == 500
@@ -51,12 +51,21 @@ def test_normalize_config_restaura_tipos_e_limites() -> None:
     assert normalized["volume"] == 100
 
 
+def test_saltos_por_area_compativeis_com_configuracoes_antigas() -> None:
+    """Acrescenta os saltos por área sem modificar intervalos e atalhos anteriores."""
+    normalized = normalize_config({"small_jump": 7, "large_jump": 30})
+    assert normalized["small_jump"] == 7 and normalized["large_jump"] == 30
+    assert normalized["video_scroll_jump"] == 5 and normalized["track_scroll_jump"] == 20
+    invalid = normalize_config({"video_scroll_jump": 0, "track_scroll_jump": 3601})
+    assert invalid["video_scroll_jump"] == 5 and invalid["track_scroll_jump"] == 20
+
+
 def test_load_config_corrompida_preserva_backup(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Não permite restaurar padrões sem antes preservar a configuração ilegível."""
 
     config_path = tmp_path / "config.json"
     config_path.write_text('{"volume":', encoding="utf-8")
-    monkeypatch.setattr(config_module, "CONFIG_PATH", config_path)
+    monkeypatch.setattr(config_module, "CONFIG_PATH", tmp_path / "config.vdb")
 
     with pytest.raises(ConfigLoadError) as error:
         load_config()
@@ -70,7 +79,7 @@ def test_config_path_fica_ao_lado_do_modulo() -> None:
     """Confirma o local estável usado no modo de execução pelo código-fonte."""
 
     assert config_module.CONFIG_PATH.parent == config_module.Path(config_module.__file__).resolve().parent
-    assert config_module.CONFIG_PATH.name == "config.json"
+    assert config_module.CONFIG_PATH.name == "config.vdb"
 
 
 def test_application_dir_fica_ao_lado_do_executavel_quando_empacotado(
@@ -89,7 +98,7 @@ def test_load_config_rejeita_raiz_nao_objeto(monkeypatch: pytest.MonkeyPatch, tm
 
     config_path = tmp_path / "config.json"
     config_path.write_text("[]", encoding="utf-8")
-    monkeypatch.setattr(config_module, "CONFIG_PATH", config_path)
+    monkeypatch.setattr(config_module, "CONFIG_PATH", tmp_path / "config.vdb")
     with pytest.raises(ConfigLoadError) as error:
         load_config()
     assert error.value.backup_path is not None
