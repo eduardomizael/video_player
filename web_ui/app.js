@@ -305,7 +305,7 @@ function field(name, label, value = "", kind = "text", timing = false) {
   const input =
     kind === "textarea"
       ? `<textarea name="${name}">${escapeHtml(value)}</textarea>`
-      : `<input name="${name}" type="${kind}" value="${escapeHtml(value)}" ${kind === "file" ? 'accept="image/*"' : ""} ${timing && tab === "chapters" ? 'data-time-mask inputmode="numeric" placeholder="00:00:00" autocomplete="off" aria-description="Digite os números de horas, minutos e segundos. Os dois-pontos são inseridos automaticamente."' : ""}>`;
+      : `<input name="${name}" type="${kind}" value="${escapeHtml(value)}" ${kind === "file" ? 'accept=".jpg,.jpeg,.gif,.png,.webp,image/jpeg,image/gif,image/png,image/webp"' : ""} ${timing && tab === "chapters" ? 'data-time-mask inputmode="numeric" placeholder="00:00:00" autocomplete="off" aria-description="Digite os números de horas, minutos e segundos. Os dois-pontos são inseridos automaticamente."' : ""}>`;
   return `<label class="field">${label}${timing ? `<div class="field-inline">${input}<button type="button" data-capture="${name}">Tempo atual</button></div>` : input}</label>`;
 }
 function imageLinks(node) {
@@ -731,6 +731,17 @@ async function loadImage(file) {
   $("crop").hidden = true;
   if (file.size > 20 * 1024 * 1024) {
     $("form-error").textContent = "A imagem deve ter no máximo 20 MB.";
+    return;
+  }
+  const bytes = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  const startsWith = (signature, offset = 0) => signature.every((byte, index) => bytes[offset + index] === byte);
+  const supported = startsWith([0xff, 0xd8, 0xff]) ||
+    startsWith([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) ||
+    startsWith([0x47, 0x49, 0x46, 0x38, 0x37, 0x61]) ||
+    startsWith([0x47, 0x49, 0x46, 0x38, 0x39, 0x61]) ||
+    (startsWith([0x52, 0x49, 0x46, 0x46]) && startsWith([0x57, 0x45, 0x42, 0x50], 8));
+  if (!supported) {
+    $("form-error").textContent = "Formato não suportado. Use JPG/JPEG, GIF, PNG ou WebP.";
     return;
   }
   const url = URL.createObjectURL(file),

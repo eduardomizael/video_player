@@ -10,6 +10,8 @@ from tkinter import filedialog, messagebox, ttk
 
 from PIL import Image, ImageGrab, ImageTk
 
+from image_formats import open_supported_image
+
 CROP_PRESETS = {
     "Quadrada (1080 × 1080)": (1080, 1080),
     "Card vertical (1080 × 1350)": (1080, 1350),
@@ -88,12 +90,12 @@ class ImageCropper(tk.Toplevel):
 
         path = filedialog.askopenfilename(
             parent=self,
-            filetypes=[("Imagens", "*.png *.jpg *.jpeg *.webp *.bmp *.gif"), ("Todos os arquivos", "*.*")],
+            filetypes=[("Imagens (JPG, GIF, PNG, WebP)", "*.jpg *.jpeg *.gif *.png *.webp")],
         )
         if not path:
             return
         try:
-            with Image.open(path) as image:
+            with open_supported_image(path) as image:
                 self._set_source(image.copy(), Path(path).stem)
         except (OSError, ValueError) as exc:
             messagebox.showerror("Imagem inválida", str(exc), parent=self)
@@ -111,7 +113,7 @@ class ImageCropper(tk.Toplevel):
             return
         if isinstance(clipboard, list) and clipboard:
             try:
-                with Image.open(clipboard[0]) as image:
+                with open_supported_image(clipboard[0]) as image:
                     self._set_source(image.copy(), Path(clipboard[0]).stem)
                 return
             except (OSError, ValueError):

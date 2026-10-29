@@ -14,8 +14,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, ImageOps
+from PIL import ImageOps
 
+from image_formats import open_supported_image
 from logic import ChapterManager, SubtitleManager
 
 
@@ -103,7 +104,7 @@ class EditorSession:
                             raw = base64.b64decode(image.pop("source").split(",", 1)[1], validate=True)
                             if len(raw) > 20 * 1024 * 1024:
                                 raise ValueError("A imagem deve ter no máximo 20 MB.")
-                            with Image.open(io.BytesIO(raw)) as original:
+                            with open_supported_image(io.BytesIO(raw)) as original:
                                 original.load()
                                 normalized = ImageOps.exif_transpose(original).convert("RGB")
                                 output = io.BytesIO()
