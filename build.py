@@ -34,6 +34,10 @@ def build_exe(webview: bool = False) -> None:
         str(root / "build" / app_name),
         "--specpath",
         str(root / "build" / "specs"),
+        "--exclude-module",
+        "PIL.AvifImagePlugin",
+        "--exclude-module",
+        "PIL._avif",
     ]
     if webview:
         cmd.extend(
