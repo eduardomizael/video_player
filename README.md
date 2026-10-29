@@ -17,6 +17,9 @@ A organização dos módulos, os esquemas de armazenamento e as limitações con
 - Aba adicional para editar lista de casting
 - Aba de metadados em árvore, com chave e valor; somente folhas podem ter valor e, ao criar um filho, o valor do pai é transferido para ele
 - Aba de imagens: recorte por posicionamento e zoom, abertura de arquivo ou colagem da área de transferência e associação de imagens a capítulos, elenco ou metadados
+- Importação de arquivos de imagem limitada a JPG/JPEG, GIF, PNG e WebP nas duas interfaces; os demais
+  formatos, incluindo AVIF, são recusados pelo conteúdo, mesmo com extensão alterada. Imagens animadas são
+  usadas como um quadro estático no recorte. Não há conversão prévia de formatos não suportados.
 - Arquivo `.chp` (SQLite) por vídeo para capítulos, elenco, metadados e imagens; imagens são armazenadas como dados binários recortados, sem manter o original
 - Menu para abrir novos arquivos
 - Banco SQLite `config.vdb`, mantido ao lado do `app.py` ou do executável, armazena:
@@ -206,6 +209,7 @@ e a biblioteca para outra instalação, copie o `config.vdb` com o aplicativo fe
 Os arquivos `.chp` e `.srt` continuam junto dos vídeos. Caminhos da biblioteca precisam continuar acessíveis no destino.
 Os recursos da interface são extraídos automaticamente para uma pasta temporária pelo PyInstaller ao abrir o `.exe`.
 O build usa caminhos relativos à localização de `build.py`, independentemente da pasta atual do terminal.
+Os dois builds excluem explicitamente o plugin AVIF e sua extensão nativa do Pillow.
 
 O símbolo verde do cabeçalho também é o ícone da janela e do executável webview. O desenho original fica em
 `web_ui/app-icon.svg`; suas versões PNG e ICO (16 a 256 pixels) podem ser regeneradas com

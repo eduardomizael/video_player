@@ -9,6 +9,7 @@
 | `web_ui/` | HTML, CSS, JavaScript e ícones locais da interface webview. |
 | `web_backend.py` | Sessão de edição, detecção de alterações externas e servidor de mídia em loopback. |
 | `logic.py` | Validação e persistência compartilhada dos projetos `.chp` e das legendas `.srt`. |
+| `image_formats.py` | Restrição da leitura de arquivos de imagem a JPEG, GIF, PNG e WebP. |
 | `config.py` | Valores padrão, normalização e leitura/gravação das preferências. |
 | `app_storage.py` | Abertura transacional de `config.vdb`, versão de esquema e migração das fontes antigas. |
 | `video_history.py` | Inclusão, consulta e descoberta de vídeos com recursos salvos. |
@@ -93,6 +94,13 @@ O `.chp` é SQLite e contém o esquema definido por `ChapterManager._create_sche
 Os tipos de vínculo são restringidos por SQL. O identificador do registro associado é validado pela aplicação;
 não há uma chave estrangeira polimórfica para as três tabelas. Tempos de capítulos são segundos inteiros.
 As gravações validam os registros e substituem o conteúdo do projeto em uma transação.
+
+A importação de imagens aceita somente JPEG (extensões `.jpg` e `.jpeg`), GIF, PNG e WebP. O conteúdo é
+verificado antes do recorte na interface web e pela leitura restrita do Pillow na interface clássica e no backend.
+Renomear AVIF ou outro formato não o torna aceito. Os recortes continuam armazenados em JPEG/PNG; a aplicação
+não converte arquivos de formatos não suportados. A área de transferência pode fornecer pixels já decodificados,
+sem um formato de arquivo de origem. GIF/WebP animados não são preservados como animação no recorte.
+Os builds excluem `PIL.AvifImagePlugin` e `PIL._avif`, mantendo os decodificadores necessários aos formatos aceitos.
 
 **O formato `.chp` ainda não possui marcador de versão de esquema.** A criação é idempotente com `CREATE TABLE IF
 NOT EXISTS`; isso não equivale a uma migração de colunas ou a uma proteção contra formatos de versões futuras.
