@@ -164,6 +164,20 @@ tab='images'; selected=null; render(); showEditor(); form.elements.title.value='
 let canvas=document.createElement('canvas'); canvas.width=120; canvas.height=80;
 canvas.getContext('2d').fillRect(0,0,120,80);
 let blob=await new Promise(resolve=>canvas.toBlob(resolve));
+const unsupportedHeader=new Uint8Array([0,0,0,24,102,116,121,112,97,118,105,102]);
+await loadImage(new File([unsupportedHeader],'renomeada.jpg',{type:'image/jpeg'}));
+await check(!cropImage && $('form-error').textContent.includes('Formato não suportado'),'AVIF renomeado não foi recusado antes da decodificação');
+const bmpHeader=new Uint8Array([66,77,0,0,0,0,0,0,0,0,0,0]);
+await loadImage(new File([bmpHeader],'renomeada.png',{type:'image/png'}));
+await check(!cropImage && $('form-error').textContent.includes('Formato não suportado'),'BMP renomeado não foi recusado');
+for(const type of ['image/jpeg','image/png','image/webp']) {
+    const sample=await new Promise(resolve=>canvas.toBlob(resolve,type));
+    await loadImage(new File([sample],'amostra',{type}));
+    await check(!!cropImage,`Formato permitido recusado: ${type}`);
+}
+const gifBytes=Uint8Array.from(atob('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'),c=>c.charCodeAt(0));
+await loadImage(new File([gifBytes],'amostra.gif',{type:'image/gif'}));
+await check(!!cropImage,'GIF foi recusado');
 await loadImage(new File([blob],'amostra.png',{type:'image/png'}));
 $('crop-ratio').value='1'; $('crop-zoom').value='2'; drawCrop();
 await saveEditor({preventDefault(){}});
